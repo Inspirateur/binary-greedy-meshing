@@ -1,0 +1,10 @@
+[package]
+name = "binary-greedy-meshing"
+version = "0.1.0"
+edition = "2021"
+description = "A port of A port of https://github.com/cgerikj/binary-greedy-meshing to Rust."
+license = "MIT"
+repository = "https://github.com/Inspirateur/binary-greedy-meshing"
+keywords = ["meshing", "greedy", "binary", "voxel", "chunk"]
+
+[dependencies]
