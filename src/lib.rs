@@ -4,31 +4,54 @@ const CS_2: usize = CS * CS;
 const CS_P2: usize = CS_P * CS_P;
 const P_MASK: u64 = !(1 << 63 | 1);
 
+#[derive(Debug)]
 pub struct MeshData {
     // CS_2 * 6
-    face_masks: Vec<u64>,
+    face_masks: Box<[u64]>,
     // CS_P2
-    opaque_mask: Vec<u64>,
+    pub opaque_mask: Box<[u64]>,
     // CS_2
-    forward_merged: Vec<u8>,
+    forward_merged: Box<[u8]>,
     // CS
-    right_merged: Vec<u8>,
-    vertices: Vec<usize>,
-    vertex_count: usize,
-    max_vertices: usize,
+    right_merged: Box<[u8]>,
+    pub quads: Vec<u64>,
     face_vertex_begin: [usize; 6],
     face_vertex_length: [usize; 6],
 }
 
+impl MeshData {
+    pub fn new(chunk_size: usize) -> Self {
+        let chunk_size_2 = chunk_size * chunk_size;
+        let chunk_size_padded = chunk_size + 2;
+        let chunk_size_padded2 = chunk_size_padded*chunk_size_padded;
+        Self { 
+            face_masks: vec![0; chunk_size_2*6].into_boxed_slice(), 
+            opaque_mask: vec![0; chunk_size_padded2].into_boxed_slice(), 
+            forward_merged: vec![0; chunk_size_2].into_boxed_slice(), 
+            right_merged: vec![0; chunk_size].into_boxed_slice(), 
+            quads: Vec::new(), 
+            face_vertex_begin: [0; 6], 
+            face_vertex_length: [0; 6] 
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.face_masks.fill(0);
+        self.opaque_mask.fill(0);
+        self.forward_merged.fill(0);
+        self.right_merged.fill(0);
+        self.face_vertex_begin.fill(0);
+        self.face_vertex_length.fill(0);
+        self.quads.clear();
+    }
+}
+
 // Passing &mut MeshData instead of returning MeshData allows the caller to reuse buffers
 pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
-    mesh_data.vertex_count = 0;
-    let mut vertex_i: usize = 0;
-
     let opaque_mask = &mut mesh_data.opaque_mask;
     let face_masks = &mut mesh_data.face_masks;
     let forward_merged = &mut mesh_data.forward_merged;
-    let righ_merged = &mut mesh_data.right_merged;
+    let right_merged = &mut mesh_data.right_merged;
 
     // Hidden face culling
     for a in 1..(CS_P-1) {
@@ -54,7 +77,7 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
     for face in 0..=3 {
         let axis = face / 2;
 
-        let face_vertex_begin = vertex_i;
+        let face_vertex_begin = mesh_data.quads.len();
 
         for layer in 0..CS {
             let bits_location = layer * CS + face * CS_2;
@@ -112,13 +135,12 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
                         3 => get_quad(mesh_up, mesh_front, mesh_left, mesh_length, mesh_width, v_type),
                         _ => unreachable!()
                     };
-
-                    insert_quad(&mut mesh_data.vertices, quad, &mut vertex_i, &mut mesh_data.max_vertices);
+                    mesh_data.quads.push(quad);
                 }
             }
         }
 
-        let face_vertex_length = vertex_i - face_vertex_begin;
+        let face_vertex_length = mesh_data.quads.len() - face_vertex_begin;
         mesh_data.face_vertex_begin[face] = face_vertex_begin;
         mesh_data.face_vertex_length[face] =face_vertex_length;
     }
@@ -127,7 +149,7 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
     for face in 4..6 {
         let axis = face / 2;
 
-        let face_vertex_begin = vertex_i;
+        let face_vertex_begin = mesh_data.quads.len();
 
         for forward in 0..CS {
             let bits_location = forward * CS + face * CS_2;
@@ -150,7 +172,7 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
 
                     let v_type = voxels[get_axis_index(axis, right + 1, forward + 1, bit_pos)];
                     let forward_merge_i = right_cs + (bit_pos - 1);
-                    let right_merged_ref = &mut righ_merged[bit_pos - 1];
+                    let right_merged_ref = &mut right_merged[bit_pos - 1];
 
                     if *right_merged_ref == 0 && (bits_forward >> bit_pos & 1) != 0 && v_type == voxels[get_axis_index(axis, right + 1, forward + 2, bit_pos)] {
                         forward_merged[forward_merge_i] += 1;
@@ -184,17 +206,15 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
                         mesh_length as usize, 
                         v_type as usize
                     );
-
-                    insert_quad(&mut mesh_data.vertices, quad, &mut vertex_i, &mut mesh_data.max_vertices);
+                    mesh_data.quads.push(quad);
                 }
             }
         }
 
-        let face_vertex_length = vertex_i - face_vertex_begin;
+        let face_vertex_length = mesh_data.quads.len() - face_vertex_begin;
         mesh_data.face_vertex_begin[face] = face_vertex_begin;
         mesh_data.face_vertex_length[face] = face_vertex_length;
     }
-    mesh_data.vertex_count = vertex_i + 1;
 }
 
 #[inline]
@@ -207,18 +227,30 @@ fn get_axis_index(axis: usize, a: usize, b: usize, c: usize) -> usize {
 }
 
 #[inline]
-fn insert_quad(vertices: &mut Vec<usize>, quad: usize, vertex_i: &mut usize, max_vertices: &mut usize) {
-    if *vertex_i >= *max_vertices - 6 {
-      vertices.resize(*max_vertices * 2, 0);
-      *max_vertices *= 2;
-    }
-  
-    vertices[*vertex_i] = quad;
-  
-    *vertex_i += 1;
+fn get_quad(x: usize, y: usize, z: usize, w: usize, h: usize, v_type: usize) -> u64 {
+    ((v_type << 32) | (h << 24) | (w << 18) | (z << 12) | (y << 6) | x) as u64
 }
-  
-#[inline]
-fn get_quad(x: usize, y: usize, z: usize, w: usize, h: usize, v_type: usize) -> usize {
-    (v_type << 32) | (h << 24) | (w << 18) | (z << 12) | (y << 6) | x
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+
+    #[test]
+    fn it_works() {
+        let mut voxels: [u16; 262144] = [0; CS_P2*CS_P];
+        voxels[CS_P2+CS_P+2] = 1;
+        voxels[CS_P2+CS_P+3] = 1;
+        let mut mesh_data = MeshData::new(CS);
+        // Fill the opacity mask
+        for (i, voxel) in voxels.iter().enumerate() {
+            // If the voxel is transparent we skip it
+            if *voxel == 0 {
+                continue;
+            }
+            let (r, q) = (i/CS_P, i%CS_P);
+            mesh_data.opaque_mask[r] |= 1 << q;
+        }
+        mesh(&voxels, &mut mesh_data);
+        // Now mesh_data.quads is ready to be sent to the GPU
+    }
 }
