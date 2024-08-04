@@ -15,8 +15,8 @@ pub struct MeshData {
     // CS
     right_merged: Box<[u8]>,
     pub quads: Vec<u64>,
-    face_vertex_begin: [usize; 6],
-    face_vertex_length: [usize; 6],
+    pub face_vertex_begin: [usize; 6],
+    pub face_vertex_length: [usize; 6],
 }
 
 impl MeshData {
