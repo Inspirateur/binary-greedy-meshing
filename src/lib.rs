@@ -4,6 +4,16 @@ const CS_2: usize = CS * CS;
 const CS_P2: usize = CS_P * CS_P;
 const P_MASK: u64 = !(1 << 63 | 1);
 
+/* note:
+const vec3 normalLookup[6] = {
+  vec3( 0, 1, 0 ), Up
+  vec3(0, -1, 0 ), Down
+  vec3( 1, 0, 0 ), Right
+  vec3( -1, 0, 0 ), Light
+  vec3( 0, 0, 1 ), Front
+  vec3( 0, 0, -1 ) Back
+};*/
+
 #[derive(Debug)]
 pub struct MeshData {
     // CS_2 * 6
@@ -219,6 +229,7 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
 
 #[inline]
 fn get_axis_index(axis: usize, a: usize, b: usize, c: usize) -> usize {
+    // TODO: figure out how to shuffle this around to make it work with YZX
     match axis {
         0 => b + (a * CS_P) + (c * CS_P2),
         1 => b + (c * CS_P) + (a * CS_P2),
@@ -234,12 +245,45 @@ fn get_quad(x: usize, y: usize, z: usize, w: usize, h: usize, v_type: usize) -> 
 #[cfg(test)]
 mod tests {
     use crate::*;
+    const MASK6: u64 = 0b111_111;
+
+    #[derive(Debug)]
+    struct Quad {
+        x: u64,
+        y: u64,
+        z: u64,
+        w: u64,
+        h: u64,
+        v_type: u64
+    }
+
+    impl From<u64> for Quad {
+        fn from(value: u64) -> Self {
+            Self {
+                x: value & MASK6,
+                y: (value >> 6) & MASK6,
+                z: (value >> 12) & MASK6,
+                w: (value >> 18) & MASK6,
+                h: (value >> 24) & MASK6,
+                v_type: value >> 32,
+            }
+        }
+    }
+
+    fn linearize(x: usize, y: usize, z: usize) -> usize {
+        z + x*CS_P + y*CS_P2
+    }
 
     #[test]
-    fn it_works() {
+    fn doesnt_crash() {
         let mut voxels: [u16; 262144] = [0; CS_P2*CS_P];
-        voxels[CS_P2+CS_P+2] = 1;
-        voxels[CS_P2+CS_P+3] = 1;
+        voxels[linearize(1, 1, 1)] = 1;
+        voxels[linearize(1, 2, 1)] = 1;
+        /*
+        voxels[linearize(1, 3, 1)] = 1;
+        voxels[linearize(2, 4, 1)] = 1;
+        voxels[linearize(3, 4, 1)] = 1;
+         */
         let mut mesh_data = MeshData::new(CS);
         // Fill the opacity mask
         for (i, voxel) in voxels.iter().enumerate() {
@@ -252,5 +296,12 @@ mod tests {
         }
         mesh(&voxels, &mut mesh_data);
         // Now mesh_data.quads is ready to be sent to the GPU
+        let quads: Vec<Quad> = mesh_data.quads.into_iter().map(From::<u64>::from).collect();
+        for (i, (start, len)) in mesh_data.face_vertex_begin.iter().zip(mesh_data.face_vertex_length).enumerate() {
+            println!("--- Face {i} ---");
+            for quad in &quads[*start..(*start+len)] {
+                println!("{:?}", quad);
+            }
+        }
     }
 }
