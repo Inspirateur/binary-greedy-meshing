@@ -242,6 +242,22 @@ fn get_quad(x: usize, y: usize, z: usize, w: usize, h: usize, v_type: usize) -> 
     ((v_type << 32) | (h << 24) | (w << 18) | (z << 12) | (y << 6) | x) as u64
 }
 
+
+pub fn indices(num_quads: usize) -> Vec<u32> {
+    // Each quads is made of 2 triangles which require 6 indices
+    // The indices are the same regardless of the face
+    let mut res = Vec::with_capacity(num_quads*6);
+    for i in 0..num_quads as u32 {
+        res.push((i << 2) | 2);
+        res.push((i << 2) | 0);
+        res.push((i << 2) | 1);
+        res.push((i << 2) | 1);
+        res.push((i << 2) | 3);
+        res.push((i << 2) | 2);
+    }
+    res
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
