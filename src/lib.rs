@@ -7,9 +7,9 @@ const P_MASK: u64 = !(1 << 63 | 1);
 /* note:
 const vec3 normalLookup[6] = {
   vec3( 0, 1, 0 ), Up
-  vec3(0, -1, 0 ), Down
+  vec3( 0, -1, 0 ), Down
   vec3( 1, 0, 0 ), Right
-  vec3( -1, 0, 0 ), Light
+  vec3( -1, 0, 0 ), Left
   vec3( 0, 0, 1 ), Front
   vec3( 0, 0, -1 ) Back
 };*/
