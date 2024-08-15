@@ -29,8 +29,8 @@ fn main() {
         let (r, q) = (i/bgm::CS_P, i%bgm::CS_P);
         mesh_data.opaque_mask[r] |= 1 << q;
     }
+    // Does the meshing, mesh_data.quads is the output
     bgm::mesh(&voxels, &mut mesh_data);
-    // mesh_data.quads is the output
 }
 ```
 
