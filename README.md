@@ -50,8 +50,8 @@ pub struct MeshData {
 The face groups correspond to Up, Down, Right, Left, Front, Back, in this order. (assuming right handed Y up)
 
 The fastest way of rendering quads is using instancing (check [this video](https://www.youtube.com/watch?v=40JzyaOYJeY) to learn more about the topic), but if it's not available you can still convert the quads to vertices and indices making a regular mesh, see this Riverbed files for an example of this:
-- (src/render/mesh_utils.rs)[https://github.com/Inspirateur/riverbed/blob/main/src/render/mesh_utils.rs]
-- (src/render/mesh_chunks.rs)[https://github.com/Inspirateur/riverbed/blob/main/src/render/mesh_chunks.rs]
+- [src/render/mesh_utils.rs](https://github.com/Inspirateur/riverbed/blob/main/src/render/mesh_utils.rs) for Face+Quad => vertices conversion
+- [src/render/mesh_chunks.rs](https://github.com/Inspirateur/riverbed/blob/main/src/render/mesh_chunks.rs) for the rest of the meshing code (+ LOD)
 
 ## Performance
 Profiling info from Riverbed's usage of the crate on Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz:
