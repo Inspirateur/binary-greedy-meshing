@@ -17,9 +17,9 @@ fn main() {
     // Add 2 voxels at position 0;0;0 and 0;1;0
     voxels[pad_linearize(0, 0, 0)] = 1;
     voxels[pad_linearize(0, 1, 0)] = 1;
-    // 
+    // Contain useful buffers that can be cached and cleared with mesh_data.clear() to avoid re-allocation
     let mut mesh_data = bgm::MeshData::new(bgm::CS);
-    // Fill the opacity mask, this can be stored 
+    // Fill the opacity mask, this can be cached 
     for (i, voxel) in voxels.iter().enumerate() {
         // If the voxel is transparent we skip it
         if *voxel == 0 {
@@ -34,10 +34,11 @@ fn main() {
 ```
 
 ### What to do with `mesh_data.quads`
-`mesh_data.quads` is a Vec<u64>, each u64 encodes all the information of a quad in the following manner:  
+`mesh_data.quads` is a `Vec<u64>`, each u64 encodes all the information of a quad in the following manner:
 ```rust
 (v_type << 32) | (h << 24) | (w << 18) | (z << 12) | (y << 6) | x
 ```
+
 The quad Vec is grouped into 6 parts, 1 for each face type, which are delimited by these fields:
 ```rust
 pub struct MeshData {
@@ -60,4 +61,4 @@ Profiling info from Riverbed's usage of the crate on Intel(R) Xeon(R) CPU E5-165
 
 This is close to the 50-200μs range reported (for meshing) by folks from the original C version of the library.
 
-> The chunk sizes are 62^3 (64^3 with padding), this crate doesn't support other sizes. 
+*chunk sizes are 62^3 (64^3 with padding), this crate doesn't support other sizes.*
