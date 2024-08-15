@@ -63,6 +63,7 @@ Profiling info from Riverbed's usage of the crate on Intel(R) Xeon(R) CPU E5-165
 This is close to the 50-200μs range reported (for meshing) by folks from the original C version of the library.
 
 The meshing is also ~15x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~4.5ms** to greedy mesh a chunk on my machine (also tested with Riverbed); 
-but the comparison isn't completely fair because block-mesh-rs properly supports transparency and this crate doesn't (although I don't expect transparency to multiply meshing time by more than x2). 
+but the comparison isn't completely fair because block-mesh-rs properly supports transparency and this crate doesn't  
+(although I don't expect transparency to multiply meshing time by more than x2)
 
 *chunk sizes are 62^3 (64^3 with padding), this crate doesn't support other sizes.*

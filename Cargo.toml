@@ -1,6 +1,6 @@
 [package]
 name = "binary-greedy-meshing"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 description = "A port of A port of https://github.com/cgerikj/binary-greedy-meshing to Rust."
 license = "MIT"
