@@ -1,7 +1,8 @@
-const CS: usize = 62;
-const CS_P: usize = CS + 2;
+pub const CS: usize = 62;
 const CS_2: usize = CS * CS;
-const CS_P2: usize = CS_P * CS_P;
+pub const CS_P: usize = CS + 2;
+pub const CS_P2: usize = CS_P * CS_P;
+pub const CS_P3: usize = CS_P * CS_P * CS_P;
 const P_MASK: u64 = !(1 << 63 | 1);
 
 /* note:
@@ -16,17 +17,19 @@ const vec3 normalLookup[6] = {
 
 #[derive(Debug)]
 pub struct MeshData {
-    // CS_2 * 6
-    face_masks: Box<[u64]>,
-    // CS_P2
+    // Input (CS_P2)
     pub opaque_mask: Box<[u64]>,
-    // CS_2
-    forward_merged: Box<[u8]>,
-    // CS
-    right_merged: Box<[u8]>,
+    // Outputs
     pub quads: Vec<u64>,
     pub face_vertex_begin: [usize; 6],
     pub face_vertex_length: [usize; 6],
+    // Internal buffers
+    // (CS_2 * 6)
+    face_masks: Box<[u64]>,
+    // (CS_2)
+    forward_merged: Box<[u8]>,
+    // (CS)
+    right_merged: Box<[u8]>,
 }
 
 impl MeshData {
@@ -68,18 +71,19 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
         let a_cs_p = a * CS_P;
 
         for b in 1..(CS_P-1) {
-            let column_bits = opaque_mask[(a * CS_P) + b] & P_MASK;
+            let op_index = a_cs_p + b;
+            let column_bits = opaque_mask[op_index] & P_MASK;
             let ba_index = (b - 1) + (a - 1) * CS;
             let ab_index = (a - 1) + (b - 1) * CS;
 
-            face_masks[ba_index + 0 * CS_2] = (column_bits & !opaque_mask[a_cs_p + CS_P + b]) >> 1;
-            face_masks[ba_index + 1 * CS_2] = (column_bits & !opaque_mask[a_cs_p - CS_P + b]) >> 1;
+            face_masks[ba_index + 0 * CS_2] = (column_bits & !opaque_mask[op_index + CS_P]) >> 1;
+            face_masks[ba_index + 1 * CS_2] = (column_bits & !opaque_mask[op_index - CS_P]) >> 1;
 
-            face_masks[ab_index + 2 * CS_2] = (column_bits & !opaque_mask[a_cs_p + (b + 1)]) >> 1;
-            face_masks[ab_index + 3 * CS_2] = (column_bits & !opaque_mask[a_cs_p + (b - 1)]) >> 1;
+            face_masks[ab_index + 2 * CS_2] = (column_bits & !opaque_mask[op_index + 1]) >> 1;
+            face_masks[ab_index + 3 * CS_2] = (column_bits & !opaque_mask[op_index - 1]) >> 1;
 
-            face_masks[ba_index + 4 * CS_2] = column_bits & !(opaque_mask[a_cs_p + b] >> 1);
-            face_masks[ba_index + 5 * CS_2] = column_bits & !(opaque_mask[a_cs_p + b] << 1);
+            face_masks[ba_index + 4 * CS_2] = column_bits & !(opaque_mask[op_index] >> 1);
+            face_masks[ba_index + 5 * CS_2] = column_bits & !(opaque_mask[op_index] << 1);
         }
     }
 
@@ -260,7 +264,7 @@ pub fn indices(num_quads: usize) -> Vec<u32> {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use crate as bgm;
     const MASK6: u64 = 0b111_111;
 
     #[derive(Debug)]
@@ -286,32 +290,28 @@ mod tests {
         }
     }
 
-    fn linearize(x: usize, y: usize, z: usize) -> usize {
-        z + x*CS_P + y*CS_P2
+    fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
+        z + 1 + (x + 1)*bgm::CS_P + (y + 1)*bgm::CS_P2
     }
-
+    
     #[test]
     fn doesnt_crash() {
-        let mut voxels: [u16; 262144] = [0; CS_P2*CS_P];
-        voxels[linearize(1, 1, 1)] = 1;
-        voxels[linearize(1, 2, 1)] = 1;
-        /*
-        voxels[linearize(1, 3, 1)] = 1;
-        voxels[linearize(2, 4, 1)] = 1;
-        voxels[linearize(3, 4, 1)] = 1;
-         */
-        let mut mesh_data = MeshData::new(CS);
+        let mut voxels = [0; bgm::CS_P3];
+        voxels[pad_linearize(0, 0, 0)] = 1;
+        voxels[pad_linearize(0, 1, 0)] = 1;
+    
+        let mut mesh_data = bgm::MeshData::new(bgm::CS);
         // Fill the opacity mask
         for (i, voxel) in voxels.iter().enumerate() {
             // If the voxel is transparent we skip it
             if *voxel == 0 {
                 continue;
             }
-            let (r, q) = (i/CS_P, i%CS_P);
+            let (r, q) = (i/bgm::CS_P, i%bgm::CS_P);
             mesh_data.opaque_mask[r] |= 1 << q;
         }
-        mesh(&voxels, &mut mesh_data);
-        // Now mesh_data.quads is ready to be sent to the GPU
+        bgm::mesh(&voxels, &mut mesh_data);
+        // mesh_data.quads is the output
         let quads: Vec<Quad> = mesh_data.quads.into_iter().map(From::<u64>::from).collect();
         for (i, (start, len)) in mesh_data.face_vertex_begin.iter().zip(mesh_data.face_vertex_length).enumerate() {
             println!("--- Face {i} ---");
