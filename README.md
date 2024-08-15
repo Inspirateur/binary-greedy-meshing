@@ -17,7 +17,8 @@ fn main() {
     // Add 2 voxels at position 0;0;0 and 0;1;0
     voxels[pad_linearize(0, 0, 0)] = 1;
     voxels[pad_linearize(0, 1, 0)] = 1;
-    // Contain useful buffers that can be cached and cleared with mesh_data.clear() to avoid re-allocation
+    // Contain useful buffers that can be cached and cleared 
+    // with mesh_data.clear() to avoid re-allocation
     let mut mesh_data = bgm::MeshData::new(bgm::CS);
     // Fill the opacity mask, this can be cached 
     for (i, voxel) in voxels.iter().enumerate() {
