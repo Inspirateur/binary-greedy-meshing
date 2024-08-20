@@ -1,5 +1,5 @@
 # binary-greedy-meshing
-For now this is simply a port of [Binary Greedy Meshing v2](https://github.com/cgerikj/binary-greedy-meshing) to Rust, but improvements to API are planned for the future (see issues).
+For now this is simply a port of [Binary Greedy Meshing v2](https://github.com/cgerikj/binary-greedy-meshing) to Rust, but API improvements are planned for the future (see issues).
 
 ## How to use
 This crate is used in the Bevy voxel game [Riverbed](https://github.com/Inspirateur/riverbed), you can check out the code for usage examples.
@@ -58,7 +58,7 @@ The fastest way of rendering quads is using instancing (check [this video](https
 ## Performance
 Profiling info from Riverbed's usage of the crate on Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz:
 - opacity mask building: **300μs** (can be cached)
-- meshing itself: **300μs**
+- meshing + quad => vertices/index conversion: **300μs**
 
 This is close to the 50-200μs range reported (for meshing) by folks from the original C version of the library.
 
