@@ -1,3 +1,5 @@
+mod face;
+pub use face::*;
 pub const CS: usize = 62;
 const CS_2: usize = CS * CS;
 pub const CS_P: usize = CS + 2;
@@ -5,15 +7,6 @@ pub const CS_P2: usize = CS_P * CS_P;
 pub const CS_P3: usize = CS_P * CS_P * CS_P;
 const P_MASK: u64 = !(1 << 63 | 1);
 
-/* note:
-const vec3 normalLookup[6] = {
-  vec3( 0, 1, 0 ), Up
-  vec3( 0, -1, 0 ), Down
-  vec3( 1, 0, 0 ), Right
-  vec3( -1, 0, 0 ), Left
-  vec3( 0, 0, 1 ), Front
-  vec3( 0, 0, -1 ) Back
-};*/
 
 #[derive(Debug)]
 pub struct MeshData {
@@ -33,15 +26,12 @@ pub struct MeshData {
 }
 
 impl MeshData {
-    pub fn new(chunk_size: usize) -> Self {
-        let chunk_size_2 = chunk_size * chunk_size;
-        let chunk_size_padded = chunk_size + 2;
-        let chunk_size_padded2 = chunk_size_padded*chunk_size_padded;
+    pub fn new() -> Self {
         Self { 
-            face_masks: vec![0; chunk_size_2*6].into_boxed_slice(), 
-            opaque_mask: vec![0; chunk_size_padded2].into_boxed_slice(), 
-            forward_merged: vec![0; chunk_size_2].into_boxed_slice(), 
-            right_merged: vec![0; chunk_size].into_boxed_slice(), 
+            face_masks: vec![0; CS_2*6].into_boxed_slice(), 
+            opaque_mask: vec![0; CS_P2].into_boxed_slice(), 
+            forward_merged: vec![0; CS_2].into_boxed_slice(), 
+            right_merged: vec![0; CS].into_boxed_slice(), 
             quads: Vec::new(), 
             face_vertex_begin: [0; 6], 
             face_vertex_length: [0; 6] 
@@ -262,6 +252,10 @@ pub fn indices(num_quads: usize) -> Vec<u32> {
     res
 }
 
+pub fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
+    z + 1 + (x + 1)*CS_P + (y + 1)*CS_P2
+}
+
 #[cfg(test)]
 mod tests {
     use crate as bgm;
@@ -289,18 +283,14 @@ mod tests {
             }
         }
     }
-
-    fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
-        z + 1 + (x + 1)*bgm::CS_P + (y + 1)*bgm::CS_P2
-    }
     
     #[test]
     fn doesnt_crash() {
         let mut voxels = [0; bgm::CS_P3];
-        voxels[pad_linearize(0, 0, 0)] = 1;
-        voxels[pad_linearize(0, 1, 0)] = 1;
+        voxels[bgm::pad_linearize(0, 0, 0)] = 1;
+        voxels[bgm::pad_linearize(0, 1, 0)] = 1;
     
-        let mut mesh_data = bgm::MeshData::new(bgm::CS);
+        let mut mesh_data = bgm::MeshData::new();
         // Fill the opacity mask
         for (i, voxel) in voxels.iter().enumerate() {
             // If the voxel is transparent we skip it
