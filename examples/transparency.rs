@@ -112,10 +112,10 @@ fn generate_meshes() -> [Mesh; 3] {
     let mut positions: [_; 3] = core::array::from_fn(|_| Vec::new());
     let mut normals: [_; 3] = core::array::from_fn(|_| Vec::new());
     let mut indices: [_; 3] = core::array::from_fn(|_| Vec::new());
-    for (face_n, (start, num_quads)) in mesh_data.face_vertex_begin.iter().zip(mesh_data.face_vertex_length).enumerate() {
+    for (face_n, quads) in mesh_data.quads.iter().enumerate() {
         let face: bgm::Face = (face_n as u8).into();
         let n = face.n();
-        for quad in mesh_data.quads[*start..(*start+num_quads)].iter() {
+        for quad in quads {
             let voxel_i = (quad >> 32) as usize -1;
             let vertices_packed = face.vertices_packed(*quad);
             for vertex_packed in vertices_packed.iter() {

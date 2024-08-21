@@ -12,10 +12,8 @@ const P_MASK: u64 = !(1 << 63 | 1);
 pub struct MeshData {
     // Input (CS_P2)
     pub opaque_mask: Box<[u64]>,
-    // Outputs
-    pub quads: Vec<u64>,
-    pub face_vertex_begin: [usize; 6],
-    pub face_vertex_length: [usize; 6],
+    // Output
+    pub quads: [Vec<u64>; 6],
     // Internal buffers
     // (CS_2 * 6)
     face_masks: Box<[u64]>,
@@ -32,9 +30,7 @@ impl MeshData {
             opaque_mask: vec![0; CS_P2].into_boxed_slice(), 
             forward_merged: vec![0; CS_2].into_boxed_slice(), 
             right_merged: vec![0; CS].into_boxed_slice(), 
-            quads: Vec::new(), 
-            face_vertex_begin: [0; 6], 
-            face_vertex_length: [0; 6] 
+            quads: core::array::from_fn(|_| Vec::new()), 
         }
     }
 
@@ -43,9 +39,9 @@ impl MeshData {
         self.opaque_mask.fill(0);
         self.forward_merged.fill(0);
         self.right_merged.fill(0);
-        self.face_vertex_begin.fill(0);
-        self.face_vertex_length.fill(0);
-        self.quads.clear();
+        for i in 0..self.quads.len() {
+            self.quads[i].clear();
+        }
     }
 }
 
@@ -80,8 +76,6 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
     // Greedy meshing faces 0-3
     for face in 0..=3 {
         let axis = face / 2;
-
-        let face_vertex_begin = mesh_data.quads.len();
 
         for layer in 0..CS {
             let bits_location = layer * CS + face * CS_2;
@@ -139,21 +133,15 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
                         3 => get_quad(mesh_up, mesh_front, mesh_left, mesh_length, mesh_width, v_type),
                         _ => unreachable!()
                     };
-                    mesh_data.quads.push(quad);
+                    mesh_data.quads[face].push(quad);
                 }
             }
         }
-
-        let face_vertex_length = mesh_data.quads.len() - face_vertex_begin;
-        mesh_data.face_vertex_begin[face] = face_vertex_begin;
-        mesh_data.face_vertex_length[face] =face_vertex_length;
     }
 
     // Greedy meshing faces 4-5
     for face in 4..6 {
         let axis = face / 2;
-
-        let face_vertex_begin = mesh_data.quads.len();
 
         for forward in 0..CS {
             let bits_location = forward * CS + face * CS_2;
@@ -210,14 +198,10 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
                         mesh_length as usize, 
                         v_type as usize
                     );
-                    mesh_data.quads.push(quad);
+                    mesh_data.quads[face].push(quad);
                 }
             }
         }
-
-        let face_vertex_length = mesh_data.quads.len() - face_vertex_begin;
-        mesh_data.face_vertex_begin[face] = face_vertex_begin;
-        mesh_data.face_vertex_length[face] = face_vertex_length;
     }
 }
 
@@ -302,11 +286,10 @@ mod tests {
         }
         bgm::mesh(&voxels, &mut mesh_data);
         // mesh_data.quads is the output
-        let quads: Vec<Quad> = mesh_data.quads.into_iter().map(From::<u64>::from).collect();
-        for (i, (start, len)) in mesh_data.face_vertex_begin.iter().zip(mesh_data.face_vertex_length).enumerate() {
+        for (i, quads) in mesh_data.quads.iter().enumerate() {
             println!("--- Face {i} ---");
-            for quad in &quads[*start..(*start+len)] {
-                println!("{:?}", quad);
+            for quad in quads {
+                println!("{:?}", Quad::from(*quad));
             }
         }
     }

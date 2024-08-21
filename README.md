@@ -35,18 +35,9 @@ fn main() {
 ```
 
 ### What to do with `mesh_data.quads`
-`mesh_data.quads` is a `Vec<u64>`, each u64 encodes all the information of a quad in the following manner:
+`mesh_data.quads` is a `[Vec<u64>; 6]`, 1 Vec<u64> per face type, each u64 encoding all the information of a quad in the following manner:
 ```rust
 (v_type << 32) | (h << 24) | (w << 18) | (z << 12) | (y << 6) | x
-```
-
-The quad Vec is grouped into 6 parts, 1 for each face type, which are delimited by these fields:
-```rust
-pub struct MeshData {
-    ...
-    pub face_vertex_begin: [usize; 6],
-    pub face_vertex_length: [usize; 6],
-}
 ```
 
 The face groups correspond to Up, Down, Right, Left, Front, Back, in this order. (assuming right handed Y up)
@@ -60,7 +51,7 @@ Profiling info from Riverbed's usage of the crate on Intel(R) Xeon(R) CPU E5-165
 - opacity mask building: **300μs** (can be cached)
 - meshing + quad => vertices/index conversion: **300μs**
 
-This is close to the 50-200μs range reported (for meshing) by folks from the original C version of the library.
+This is in line with the 50-200μs range reported (for meshing only) by folks from the original C version of the library.
 
 The meshing is also ~15x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~4.5ms** to greedy mesh a chunk on my machine (also tested with Riverbed); 
 but the comparison isn't completely fair because block-mesh-rs properly supports transparency and this crate doesn't  
