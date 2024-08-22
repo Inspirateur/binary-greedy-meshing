@@ -1,25 +1,24 @@
+use std::collections::HashSet;
 mod face;
+
 pub use face::*;
 pub const CS: usize = 62;
 const CS_2: usize = CS * CS;
 pub const CS_P: usize = CS + 2;
 pub const CS_P2: usize = CS_P * CS_P;
 pub const CS_P3: usize = CS_P * CS_P * CS_P;
-const P_MASK: u64 = !(1 << 63 | 1);
 
 
 #[derive(Debug)]
 pub struct MeshData {
-    // Input (CS_P2)
-    pub opaque_mask: Box<[u64]>,
     // Output
     pub quads: [Vec<u64>; 6],
     // Internal buffers
-    // (CS_2 * 6)
+    /// CS_2 * 6
     face_masks: Box<[u64]>,
-    // (CS_2)
+    /// CS_2
     forward_merged: Box<[u8]>,
-    // (CS)
+    /// CS
     right_merged: Box<[u8]>,
 }
 
@@ -27,7 +26,6 @@ impl MeshData {
     pub fn new() -> Self {
         Self { 
             face_masks: vec![0; CS_2*6].into_boxed_slice(), 
-            opaque_mask: vec![0; CS_P2].into_boxed_slice(), 
             forward_merged: vec![0; CS_2].into_boxed_slice(), 
             right_merged: vec![0; CS].into_boxed_slice(), 
             quads: core::array::from_fn(|_| Vec::new()), 
@@ -36,7 +34,6 @@ impl MeshData {
 
     pub fn clear(&mut self) {
         self.face_masks.fill(0);
-        self.opaque_mask.fill(0);
         self.forward_merged.fill(0);
         self.right_merged.fill(0);
         for i in 0..self.quads.len() {
@@ -45,31 +42,35 @@ impl MeshData {
     }
 }
 
-// Passing &mut MeshData instead of returning MeshData allows the caller to reuse buffers
-pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
-    let opaque_mask = &mut mesh_data.opaque_mask;
-    let face_masks = &mut mesh_data.face_masks;
-    let forward_merged = &mut mesh_data.forward_merged;
-    let right_merged = &mut mesh_data.right_merged;
+#[inline]
+fn face_value(v1: u16, v2: u16, transparents: &HashSet<u16>) -> u64 {
+    ((v1 & !v2) != 0 || (v1 != 0 && v1 != v2 && transparents.contains(&v2))) as u64
+}
 
+// Passing &mut MeshData instead of returning MeshData allows the caller to reuse buffers
+pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: HashSet<u16>) {
     // Hidden face culling
     for a in 1..(CS_P-1) {
         let a_cs_p = a * CS_P;
 
         for b in 1..(CS_P-1) {
-            let op_index = a_cs_p + b;
-            let column_bits = opaque_mask[op_index] & P_MASK;
+            let ab = (a_cs_p + b) * CS_P;
             let ba_index = (b - 1) + (a - 1) * CS;
             let ab_index = (a - 1) + (b - 1) * CS;
 
-            face_masks[ba_index + 0 * CS_2] = (column_bits & !opaque_mask[op_index + CS_P]) >> 1;
-            face_masks[ba_index + 1 * CS_2] = (column_bits & !opaque_mask[op_index - CS_P]) >> 1;
+            for c in 1..(CS_P-1) {
+                let abc = ab + c;
+                let v1 = voxels[abc];
 
-            face_masks[ab_index + 2 * CS_2] = (column_bits & !opaque_mask[op_index + 1]) >> 1;
-            face_masks[ab_index + 3 * CS_2] = (column_bits & !opaque_mask[op_index - 1]) >> 1;
-
-            face_masks[ba_index + 4 * CS_2] = column_bits & !(opaque_mask[op_index] >> 1);
-            face_masks[ba_index + 5 * CS_2] = column_bits & !(opaque_mask[op_index] << 1);
+                mesh_data.face_masks[ba_index + 0 * CS_2] |= face_value(v1, voxels[abc + CS_P2], &transparents) << (c-1);
+                mesh_data.face_masks[ba_index + 1 * CS_2] |= face_value(v1, voxels[abc - CS_P2], &transparents) << (c-1);
+                
+                mesh_data.face_masks[ab_index + 2 * CS_2] |= face_value(v1, voxels[abc + CS_P], &transparents) << (c-1);
+                mesh_data.face_masks[ab_index + 3 * CS_2] |= face_value(v1, voxels[abc - CS_P], &transparents) << (c-1);
+    
+                mesh_data.face_masks[ba_index + 4 * CS_2] |= face_value(v1, voxels[abc + 1], &transparents) << c;
+                mesh_data.face_masks[ba_index + 5 * CS_2] |= face_value(v1, voxels[abc - 1], &transparents) << c;
+            }
         }
     }
 
@@ -81,11 +82,11 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
             let bits_location = layer * CS + face * CS_2;
 
             for forward in 0..CS {
-                let mut bits_here = face_masks[forward + bits_location];
+                let mut bits_here = mesh_data.face_masks[forward + bits_location];
                 if bits_here == 0 { continue; }
 
                 let bits_next = if forward + 1 < CS {
-                    face_masks[(forward + 1) + bits_location]
+                    mesh_data.face_masks[(forward + 1) + bits_location]
                 } else {
                     0
                 };
@@ -97,31 +98,31 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
                     let v_type = voxels[get_axis_index(axis, forward + 1, bit_pos + 1, layer + 1)];
 
                     if (bits_next >> bit_pos & 1) != 0 && v_type == voxels[get_axis_index(axis, forward + 2, bit_pos + 1, layer + 1)] {
-                        forward_merged[bit_pos] += 1;
+                        mesh_data.forward_merged[bit_pos] += 1;
                         bits_here &= !(1 << bit_pos);
                         continue;
                     }
 
                     for right in (bit_pos+1)..CS {
                         if (bits_here >> right & 1) == 0 
-                            || forward_merged[bit_pos]  != forward_merged[right] 
+                            || mesh_data.forward_merged[bit_pos]  != mesh_data.forward_merged[right] 
                             || v_type != voxels[get_axis_index(axis, forward + 1, right + 1, layer + 1)] 
                         {
                             break;
                         }
-                        forward_merged[right] = 0;
+                        mesh_data.forward_merged[right] = 0;
                         right_merged += 1;
                     }
                     bits_here &= !((1 << (bit_pos + right_merged)) - 1);
 
-                    let mesh_front = forward - forward_merged[bit_pos] as usize;
+                    let mesh_front = forward - mesh_data.forward_merged[bit_pos] as usize;
                     let mesh_left = bit_pos;
                     let mesh_up = layer + (!face & 1);
 
                     let mesh_width = right_merged;
-                    let mesh_length = (forward_merged[bit_pos] + 1) as usize;
+                    let mesh_length = (mesh_data.forward_merged[bit_pos] + 1) as usize;
 
-                    forward_merged[bit_pos] = 0;
+                    mesh_data.forward_merged[bit_pos] = 0;
                     right_merged = 1;
 
                     let v_type = v_type as usize;
@@ -148,13 +149,13 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
             let bits_forward_location = (forward + 1) * CS + face * CS_2;
 
             for right in 0..CS {
-                let mut bits_here = face_masks[right + bits_location];
+                let mut bits_here = mesh_data.face_masks[right + bits_location];
                 if bits_here == 0 {
                     continue;
                 }
                 
-                let bits_forward = if forward < CS - 1 { face_masks[right + bits_forward_location] } else { 0 };
-                let bits_right = if right < CS - 1 { face_masks[right + 1 + bits_location] } else { 0 };
+                let bits_forward = if forward < CS - 1 { mesh_data.face_masks[right + bits_forward_location] } else { 0 };
+                let bits_right = if right < CS - 1 { mesh_data.face_masks[right + 1 + bits_location] } else { 0 };
                 let right_cs = right * CS;
 
                 while bits_here != 0 {
@@ -164,30 +165,30 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData) {
 
                     let v_type = voxels[get_axis_index(axis, right + 1, forward + 1, bit_pos)];
                     let forward_merge_i = right_cs + (bit_pos - 1);
-                    let right_merged_ref = &mut right_merged[bit_pos - 1];
+                    let right_merged_ref = &mut mesh_data.right_merged[bit_pos - 1];
 
                     if *right_merged_ref == 0 && (bits_forward >> bit_pos & 1) != 0 && v_type == voxels[get_axis_index(axis, right + 1, forward + 2, bit_pos)] {
-                        forward_merged[forward_merge_i] += 1;
+                        mesh_data.forward_merged[forward_merge_i] += 1;
                         continue;
                     }
 
                     if (bits_right >> bit_pos & 1) != 0 
-                        && forward_merged[forward_merge_i] == forward_merged[(right_cs + CS) + (bit_pos - 1)] 
+                        && mesh_data.forward_merged[forward_merge_i] == mesh_data.forward_merged[(right_cs + CS) + (bit_pos - 1)] 
                         && v_type == voxels[get_axis_index(axis, right + 2, forward + 1, bit_pos)] 
                     {
-                        forward_merged[forward_merge_i] = 0;
+                        mesh_data.forward_merged[forward_merge_i] = 0;
                         *right_merged_ref += 1;
                         continue;
                     }
 
                     let mesh_left = right - *right_merged_ref as usize;
-                    let mesh_front = forward - forward_merged[forward_merge_i] as usize;
+                    let mesh_front = forward - mesh_data.forward_merged[forward_merge_i] as usize;
                     let mesh_up = bit_pos - 1 + (!face & 1);
 
                     let mesh_width = 1 + *right_merged_ref;
-                    let mesh_length = 1 + forward_merged[forward_merge_i];
+                    let mesh_length = 1 + mesh_data.forward_merged[forward_merge_i];
 
-                    forward_merged[forward_merge_i] = 0;
+                    mesh_data.forward_merged[forward_merge_i] = 0;
                     *right_merged_ref = 0;
 
                     let quad = get_quad(
@@ -242,6 +243,7 @@ pub fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
     use crate as bgm;
     const MASK6: u64 = 0b111_111;
 
@@ -275,16 +277,8 @@ mod tests {
         voxels[bgm::pad_linearize(0, 1, 0)] = 1;
     
         let mut mesh_data = bgm::MeshData::new();
-        // Fill the opacity mask
-        for (i, voxel) in voxels.iter().enumerate() {
-            // If the voxel is transparent we skip it
-            if *voxel == 0 {
-                continue;
-            }
-            let (r, q) = (i/bgm::CS_P, i%bgm::CS_P);
-            mesh_data.opaque_mask[r] |= 1 << q;
-        }
-        bgm::mesh(&voxels, &mut mesh_data);
+
+        bgm::mesh(&voxels, &mut mesh_data, HashSet::new());
         // mesh_data.quads is the output
         for (i, quads) in mesh_data.quads.iter().enumerate() {
             println!("--- Face {i} ---");

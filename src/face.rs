@@ -37,12 +37,12 @@ fn vertex_info(xyz: u32, u: u32, v: u32) -> u32 {
 impl Face {
     pub fn n(&self) -> [f32; 3] {
         match self {
-            Self::Left => [-1., 0., 0.],
-            Self::Down => [0., -1., 0.],
-            Self::Back => [0., 0., -1.], 
-            Self::Right => [1., 0., 0.],
             Self::Up => [0., 1., 0.],
+            Self::Down => [0., -1., 0.],
+            Self::Right => [1., 0., 0.],
+            Self::Left => [-1., 0., 0.],
             Self::Front => [0., 0., 1.],
+            Self::Back => [0., 0., -1.], 
         }
     }
 

@@ -1,3 +1,5 @@
+use std::{collections::HashSet, hash::Hash};
+
 use bevy::{
     pbr::wireframe::{WireframeConfig, WireframePlugin}, 
     prelude::*, 
@@ -65,7 +67,8 @@ fn setup(
     commands.spawn(PbrBundle {
         mesh: solid_mesh,
         material: materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0., 0., 0., 1.0),
+            base_color: Color::linear_rgba(0., 0., 0.8, 1.0),
+            alpha_mode: AlphaMode::AlphaToCoverage,
             ..Default::default()
         }),
         ..Default::default()
@@ -74,7 +77,8 @@ fn setup(
     commands.spawn(PbrBundle {
         mesh: transp_mesh1,
         material: materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(1., 0.5, 0.5, 0.3),
+            base_color: Color::linear_rgba(1., 0.5, 0.5, 0.2),
+            alpha_mode: AlphaMode::AlphaToCoverage,
             ..Default::default()
         }),
         ..Default::default()
@@ -83,7 +87,8 @@ fn setup(
     commands.spawn(PbrBundle {
         mesh: transp_mesh2,
         material: materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0.5, 1., 0.5, 0.3),
+            base_color: Color::linear_rgba(0.5, 1., 0.5, 0.2),
+            alpha_mode: AlphaMode::AlphaToCoverage,
             ..Default::default()
         }),
         ..Default::default()
@@ -95,20 +100,16 @@ fn setup(
     });
 }
 
+fn unpack_xyz(quad: u32) -> (u32, u32, u32) {
+    (quad & MASK6, (quad >> 6) & MASK6, (quad >> 12) & MASK6)
+}
+
 /// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead 
 fn generate_meshes() -> [Mesh; 3] {
     let voxels = voxel_buffer();
     let mut mesh_data = bgm::MeshData::new();
-    // Fill the opacity mask
-    for (i, voxel) in voxels.iter().enumerate() {
-        // Transpancy is not handled yet so we treat every block except Air as opaque
-        if *voxel == 0 {
-            continue;
-        }
-        let (q, r) = (i/bgm::CS_P, i%bgm::CS_P);
-        mesh_data.opaque_mask[q] |= 1 << r;
-    }
-    bgm::mesh(&voxels, &mut mesh_data);
+
+    bgm::mesh(&voxels, &mut mesh_data, HashSet::from([2, 3]));
     let mut positions: [_; 3] = core::array::from_fn(|_| Vec::new());
     let mut normals: [_; 3] = core::array::from_fn(|_| Vec::new());
     let mut indices: [_; 3] = core::array::from_fn(|_| Vec::new());
@@ -116,7 +117,13 @@ fn generate_meshes() -> [Mesh; 3] {
         let face: bgm::Face = (face_n as u8).into();
         let n = face.n();
         for quad in quads {
-            let voxel_i = (quad >> 32) as usize -1;
+            let mut voxel_i = (quad >> 32) as usize;
+            if voxel_i == 0 {
+                let (x, y, z) = unpack_xyz(*quad as u32);
+                println!("face {face:?} at {} ; {} ; {} is AIR, not good!", x, y, z);
+                continue;
+            }
+            voxel_i -= 1;
             let vertices_packed = face.vertices_packed(*quad);
             for vertex_packed in vertices_packed.iter() {
                 let x = *vertex_packed & MASK6;
