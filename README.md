@@ -1,5 +1,5 @@
 # binary-greedy-meshing
-For now this is simply a port of [Binary Greedy Meshing v2](https://github.com/cgerikj/binary-greedy-meshing) to Rust, but API improvements are planned for the future (see issues).
+Originally a port of [Binary Greedy Meshing v2](https://github.com/cgerikj/binary-greedy-meshing) to Rust, with additional improvements such as support for transparent blocks.
 
 ## How to use
 This crate is used in the Bevy voxel game [Riverbed](https://github.com/Inspirateur/riverbed), you can check out the code for usage examples.
@@ -47,14 +47,11 @@ The fastest way of rendering quads is using instancing (check [this video](https
 - [src/render/mesh_chunks.rs](https://github.com/Inspirateur/riverbed/blob/main/src/render/mesh_chunks.rs) for the rest of the meshing code (+ LOD)
 
 ## Performance
-Profiling info from Riverbed's usage of the crate on Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz:
-- opacity mask building: **300μs** (can be cached)
-- meshing + quad => vertices/index conversion: **300μs**
+Benching the crate on Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz:
+- meshing (with transparency support): **600μs**
 
-This is in line with the 50-200μs range reported (for meshing only) by folks from the original C version of the library.
+This is coherent with the 50-200μs range (without transparency) reported from the original C version of the library, as transparency incurrs a significant cost in the hidden face culling face.
 
-The meshing is also ~15x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~4.5ms** to greedy mesh a chunk on my machine (also tested with Riverbed); 
-but the comparison isn't completely fair because block-mesh-rs properly supports transparency and this crate doesn't  
-(although I don't expect transparency to multiply meshing time by more than x2)
+The meshing is also ~7x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~4.5ms** to greedy mesh a chunk on my machine.
 
 *chunk sizes are 62^3 (64^3 with padding), this crate doesn't support other sizes.*
