@@ -117,13 +117,7 @@ fn generate_meshes() -> [Mesh; 3] {
         let face: bgm::Face = (face_n as u8).into();
         let n = face.n();
         for quad in quads {
-            let mut voxel_i = (quad >> 32) as usize;
-            if voxel_i == 0 {
-                let (x, y, z) = unpack_xyz(*quad as u32);
-                println!("face {face:?} at {} ; {} ; {} is AIR, not good!", x, y, z);
-                continue;
-            }
-            voxel_i -= 1;
+            let voxel_i = (quad >> 32) as usize -1;
             let vertices_packed = face.vertices_packed(*quad);
             for vertex_packed in vertices_packed.iter() {
                 let x = *vertex_packed & MASK6;
