@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 mod face;
+use std::collections::BTreeSet;
 
 pub use face::*;
 pub const CS: usize = 62;
@@ -43,12 +43,13 @@ impl MeshData {
 }
 
 #[inline]
-fn face_value(v1: u16, v2: u16, transparents: &HashSet<u16>) -> u64 {
-    ((v1 & !v2) != 0 || (v1 != 0 && v1 != v2 && transparents.contains(&v2))) as u64
+/// v1 is not AIR
+fn face_value(v1: u16, v2: u16, transparents: &BTreeSet<u16>) -> u64 {
+    (v2 == 0 || (v1 != v2 && transparents.contains(&v2))) as u64
 }
 
 // Passing &mut MeshData instead of returning MeshData allows the caller to reuse buffers
-pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: HashSet<u16>) {
+pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: BTreeSet<u16>) {
     // Hidden face culling
     for a in 1..(CS_P-1) {
         let a_cs_p = a * CS_P;
@@ -61,7 +62,9 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: HashSet<u16>
             for c in 1..(CS_P-1) {
                 let abc = ab + c;
                 let v1 = voxels[abc];
-
+                if v1 == 0 {
+                    continue;
+                }
                 mesh_data.face_masks[ba_index + 0 * CS_2] |= face_value(v1, voxels[abc + CS_P2], &transparents) << (c-1);
                 mesh_data.face_masks[ba_index + 1 * CS_2] |= face_value(v1, voxels[abc - CS_P2], &transparents) << (c-1);
                 
@@ -243,7 +246,8 @@ pub fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
+
     use crate as bgm;
     const MASK6: u64 = 0b111_111;
 
@@ -278,7 +282,7 @@ mod tests {
     
         let mut mesh_data = bgm::MeshData::new();
 
-        bgm::mesh(&voxels, &mut mesh_data, HashSet::new());
+        bgm::mesh(&voxels, &mut mesh_data, BTreeSet::default());
         // mesh_data.quads is the output
         for (i, quads) in mesh_data.quads.iter().enumerate() {
             println!("--- Face {i} ---");
