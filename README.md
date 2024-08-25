@@ -7,6 +7,7 @@ This crate is used in the Bevy voxel game [Riverbed](https://github.com/Inspirat
 ### Minimal example
 ```rust
 use binary_greedy_meshing as bgm;
+use std::collections::BTreeSet;
 
 fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
     z + 1 + (x + 1)*bgm::CS_P + (y + 1)*bgm::CS_P2
@@ -20,17 +21,8 @@ fn main() {
     // Contain useful buffers that can be cached and cleared 
     // with mesh_data.clear() to avoid re-allocation
     let mut mesh_data = bgm::MeshData::new(bgm::CS);
-    // Fill the opacity mask, this can be cached 
-    for (i, voxel) in voxels.iter().enumerate() {
-        // If the voxel is transparent we skip it
-        if *voxel == 0 {
-            continue;
-        }
-        let (r, q) = (i/bgm::CS_P, i%bgm::CS_P);
-        mesh_data.opaque_mask[r] |= 1 << q;
-    }
     // Does the meshing, mesh_data.quads is the output
-    bgm::mesh(&voxels, &mut mesh_data);
+    bgm::mesh(&voxels, &mut mesh_data, BTreeSet::default());
 }
 ```
 
