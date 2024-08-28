@@ -7,6 +7,7 @@ This crate is used in the Bevy voxel game [Riverbed](https://github.com/Inspirat
 ### Minimal example
 ```rust
 use binary_greedy_meshing as bgm;
+use std::collections::BTreeSet;
 
 fn main() {
     let mut voxels = [0; bgm::CS_P3];
