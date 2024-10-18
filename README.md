@@ -17,16 +17,8 @@ fn main() {
     // Contain useful buffers that can be cached and cleared 
     // with mesh_data.clear() to avoid re-allocation
     let mut mesh_data = bgm::MeshData::new();
-    // Fill the opacity mask, this can be cached 
-    for (i, voxel) in voxels.iter().enumerate() {
-        // If the voxel is transparent we skip it
-        if *voxel == 0 {
-            continue;
-        }
-        let (r, q) = (i/bgm::CS_P, i%bgm::CS_P);
-        mesh_data.opaque_mask[r] |= 1 << q;
-    }
     // Does the meshing, mesh_data.quads is the output
+    // transparent block values are signaled by putting them in the BTreeSet
     bgm::mesh(&voxels, &mut mesh_data, BTreeSet::default());
 }
 ```
