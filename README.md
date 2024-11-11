@@ -10,6 +10,8 @@ use binary_greedy_meshing as bgm;
 use std::collections::BTreeSet;
 
 fn main() {
+    // This is a flattened 3D array of u16 in ZXY order, of size 64^3 
+    // (it represents a 62^3-sized chunk that is padded with neighbor information)
     let mut voxels = [0; bgm::CS_P3];
     // Add 2 voxels at position 0;0;0 and 0;1;0
     voxels[bgm::pad_linearize(0, 0, 0)] = 1;
