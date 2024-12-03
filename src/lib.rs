@@ -1,6 +1,11 @@
-mod face;
-use std::collections::BTreeSet;
+#![no_std]
 
+#[macro_use]
+extern crate alloc;
+
+mod face;
+
+use alloc::{boxed::Box, collections::btree_set::BTreeSet, vec::Vec};
 pub use face::*;
 pub const CS: usize = 62;
 const CS_2: usize = CS * CS;
@@ -246,8 +251,7 @@ pub fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
+    use alloc::collections::btree_set::BTreeSet;
     use crate as bgm;
     const MASK6: u64 = 0b111_111;
 
@@ -284,11 +288,13 @@ mod tests {
 
         bgm::mesh(&voxels, &mut mesh_data, BTreeSet::default());
         // mesh_data.quads is the output
+        /*/
         for (i, quads) in mesh_data.quads.iter().enumerate() {
             println!("--- Face {i} ---");
             for quad in quads {
                 println!("{:?}", Quad::from(*quad));
             }
         }
+        */
     }
 }
