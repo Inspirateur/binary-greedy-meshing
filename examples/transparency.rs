@@ -1,15 +1,16 @@
 use std::collections::BTreeSet;
 
 use bevy::{
-    pbr::wireframe::{WireframeConfig, WireframePlugin}, 
-    prelude::*, 
+    pbr::wireframe::{WireframeConfig, WireframePlugin},
+    prelude::*,
     render::{
-        mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues}, 
-        render_asset::RenderAssetUsages, 
-        render_resource::VertexFormat, 
-        settings::{RenderCreation, WgpuFeatures, WgpuSettings}, 
-        RenderPlugin
-    }};
+        mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues},
+        render_asset::RenderAssetUsages,
+        render_resource::VertexFormat,
+        settings::{RenderCreation, WgpuFeatures, WgpuSettings},
+        RenderPlugin,
+    },
+};
 use binary_greedy_meshing as bgm;
 
 pub const ATTRIBUTE_VOXEL_DATA: MeshVertexAttribute =
@@ -21,20 +22,19 @@ const MASK6: u32 = 0b111_111;
 
 fn main() {
     App::new()
-    .init_resource::<WireframeConfig>()
-    .insert_resource(Msaa::Sample4)
-    .add_plugins((
-        DefaultPlugins.set(RenderPlugin {
-            render_creation: RenderCreation::Automatic(WgpuSettings {
-                features: WgpuFeatures::POLYGON_MODE_LINE,
-                ..Default::default()
+        .init_resource::<WireframeConfig>()
+        .add_plugins((
+            DefaultPlugins.set(RenderPlugin {
+                render_creation: RenderCreation::Automatic(WgpuSettings {
+                    features: WgpuFeatures::POLYGON_MODE_LINE,
+                    ..Default::default()
+                }),
+                ..default()
             }),
-            ..default()
-        }),
-        WireframePlugin,
-    ))
-    .add_systems(Startup, setup)
-    .run();
+            WireframePlugin,
+        ))
+        .add_systems(Startup, setup)
+        .run();
 }
 
 fn setup(
@@ -45,54 +45,50 @@ fn setup(
 ) {
     wireframe_config.global = true;
 
-    commands.spawn(PointLightBundle {
-        transform: Transform::from_translation(Vec3::new(50.0, 100.0, 50.0)),
-        point_light: PointLight {
+    commands.spawn((
+        Transform::from_translation(Vec3::new(50.0, 100.0, 50.0)),
+        PointLight {
             range: 200.0,
             //intensity: 8000.0,
             ..Default::default()
         },
-        ..Default::default()
-    });
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_translation(Vec3::new(40.0, 20.0, 50.0))
+    ));
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_translation(Vec3::new(40.0, 20.0, 50.0))
             .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
-        ..Default::default()
-    });
+    ));
     let [solid_mesh, transp_mesh1, transp_mesh2] = generate_meshes();
-    let solid_mesh = meshes.add(solid_mesh);
-    let transp_mesh1 = meshes.add(transp_mesh1);
-    let transp_mesh2 = meshes.add(transp_mesh2);
+    let solid_mesh = Mesh3d(meshes.add(solid_mesh));
+    let transp_mesh1 = Mesh3d(meshes.add(transp_mesh1));
+    let transp_mesh2 = Mesh3d(meshes.add(transp_mesh2));
 
-    commands.spawn(PbrBundle {
-        mesh: solid_mesh,
-        material: materials.add(StandardMaterial {
+    commands.spawn((
+        solid_mesh,
+        MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::linear_rgba(0., 0., 0.8, 1.0),
             alpha_mode: AlphaMode::AlphaToCoverage,
             ..Default::default()
-        }),
-        ..Default::default()
-    });
+        })),
+    ));
 
-    commands.spawn(PbrBundle {
-        mesh: transp_mesh1,
-        material: materials.add(StandardMaterial {
+    commands.spawn((
+        transp_mesh1,
+        MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::linear_rgba(1., 0.5, 0.5, 0.2),
             alpha_mode: AlphaMode::AlphaToCoverage,
             ..Default::default()
-        }),
-        ..Default::default()
-    });
-    
-    commands.spawn(PbrBundle {
-        mesh: transp_mesh2,
-        material: materials.add(StandardMaterial {
+        })),
+    ));
+
+    commands.spawn((
+        transp_mesh2,
+        MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::linear_rgba(0.5, 1., 0.5, 0.2),
             alpha_mode: AlphaMode::AlphaToCoverage,
             ..Default::default()
-        }),
-        ..Default::default()
-    });
+        })),
+    ));
 
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
@@ -100,7 +96,7 @@ fn setup(
     });
 }
 
-/// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead 
+/// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead
 fn generate_meshes() -> [Mesh; 3] {
     let voxels = voxel_buffer();
     let mut mesh_data = bgm::MeshData::new();
@@ -113,7 +109,7 @@ fn generate_meshes() -> [Mesh; 3] {
         let face: bgm::Face = (face_n as u8).into();
         let n = face.n();
         for quad in quads {
-            let voxel_i = (quad >> 32) as usize -1;
+            let voxel_i = (quad >> 32) as usize - 1;
             let vertices_packed = face.vertices_packed(*quad);
             for vertex_packed in vertices_packed.iter() {
                 let x = *vertex_packed & MASK6;
@@ -169,10 +165,10 @@ fn transparent_sandwich(x: usize, y: usize, z: usize) -> u16 {
     }
     if x < LAYER_W {
         return 1;
-    } else if x < LAYER_W*2 {
+    } else if x < LAYER_W * 2 {
         return 2;
-    } else if x < LAYER_W*3 {
-        return 3
+    } else if x < LAYER_W * 3 {
+        return 3;
     };
     0
 }
