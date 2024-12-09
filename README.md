@@ -39,10 +39,10 @@ The fastest way of rendering quads is using instancing (check [this video](https
 
 ## Performance
 Benching the crate on Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz:
-- meshing (with transparency support): **600μs**
+- meshing (with transparency support): **400μs**
 
 This is coherent with the 50-200μs range (without transparency) reported from the original C version of the library, as transparency incurrs a significant cost in the hidden face culling phase.
 
-The meshing is also ~7x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~4.5ms** to greedy mesh a chunk on my machine.
+The meshing is also ~10x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~4.5ms** to greedy mesh a chunk on my machine.
 
 *chunk sizes are 62^3 (64^3 with padding), this crate doesn't support other sizes.*
