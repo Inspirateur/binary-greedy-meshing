@@ -10,7 +10,7 @@ keywords = ["meshing", "greedy", "binary", "voxel", "chunk"]
 [dependencies]
 
 [dev-dependencies]
-bevy = "0.15.0-rc"
+bevy = "0.15"
 criterion = "0.5"
 
 [[bench]]
