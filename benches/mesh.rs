@@ -37,12 +37,22 @@ fn bench_opaque(c: &mut Criterion) {
 }
 
 fn bench_transparent(c: &mut Criterion) {
-
+    let voxels = voxel_buffer();
+    let mut transparents = BTreeSet::default();
+    transparents.insert(2);
+    transparents.insert(3);
+    let mut mesh_data = bgm::MeshData::new();
+    c.bench_function("bench_transparent", |b| b.iter(|| {
+        mesh_data.clear();
+        bgm::mesh(
+            black_box(voxels.as_slice()), black_box(&mut mesh_data), black_box(BTreeSet::default())
+        );
+    }));
 }
 
 criterion_group!(
     mesh, 
     bench_opaque, 
-    //bench_transparent
+    bench_transparent
 );
 criterion_main!(mesh);
