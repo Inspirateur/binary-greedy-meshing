@@ -1,7 +1,7 @@
 [package]
 name = "binary-greedy-meshing"
 version = "0.3.6"
-edition = "2021"
+edition = "2024"
 description = "A port of https://github.com/cgerikj/binary-greedy-meshing to Rust."
 license = "MIT"
 repository = "https://github.com/Inspirateur/binary-greedy-meshing"
@@ -10,7 +10,7 @@ keywords = ["meshing", "greedy", "binary", "voxel", "chunk"]
 [dependencies]
 
 [dev-dependencies]
-bevy = "0.15"
+bevy = "0.16"
 criterion = "0.5"
 
 [[bench]]

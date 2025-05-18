@@ -31,7 +31,7 @@ fn main() {
                 }),
                 ..default()
             }),
-            WireframePlugin,
+            WireframePlugin::default(),
         ))
         .add_systems(Startup, setup)
         .run();
@@ -93,6 +93,7 @@ fn setup(
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: light_consts::lux::OVERCAST_DAY,
+        ..Default::default()
     });
 }
 
