@@ -22,7 +22,7 @@ fn voxel_buffer() -> Box<[u16; MD::<CHUNK_SIZE>::CS_P3]> {
 }
 
 fn sphere(x: usize, y: usize, z: usize) -> u16 {
-    if (x as i32-CS_H).pow(2) + (y as i32-CS_H).pow(2) + (z as i32-CS_H).pow(2) < SIZE2 as i32 {
+    if (x - CS_H).pow(2) + (y - CS_H).pow(2) + (z - CS_H).pow(2) < SIZE2 {
         1
     } else {
         0
