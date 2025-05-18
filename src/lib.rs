@@ -28,8 +28,10 @@ pub struct MeshDataGeneric<const CS: usize> {
     right_merged: Box<[u8]>,
 }
 
-pub type MeshData = MeshDataGeneric<62>;
+pub type MeshData = MeshDataGeneric<CS>;
 pub use MeshDataGeneric as MeshDataSized;
+
+use MeshDataGeneric as MD;
 
 impl<const CS: usize> MeshDataGeneric<CS> {
     pub const CS_P: usize  = CS + 2;
@@ -65,7 +67,7 @@ pub fn mesh(
     mesh_data: &mut MeshData,
     transparents: BTreeSet<u16>,
 ) {
-    mesh_sized::<62>(voxels, mesh_data, transparents);
+    mesh_sized::<CS>(voxels, mesh_data, transparents);
 }
 
 // Passing &mut MeshData instead of returning MeshData allows the caller to reuse buffers
@@ -74,7 +76,6 @@ pub fn mesh_sized<const CS: usize>(
     mesh_data: &mut MeshDataGeneric<CS>,
     transparents: BTreeSet<u16>,
 ) {
-    use MeshDataGeneric as MD;
     // Hidden face culling
     for a in 1..(MD::<CS>::CS_P-1) {
         let a_cs_p = a * MD::<CS>::CS_P;
@@ -236,7 +237,6 @@ pub fn mesh_sized<const CS: usize>(
 
 #[inline]
 fn get_axis_index<const CS: usize>(axis: usize, a: usize, b: usize, c: usize) -> usize {
-    use MeshDataGeneric as MD;
     // TODO: figure out how to shuffle this around to make it work with YZX
     match axis {
         0 => b + (a * MD::<CS>::CS_P) + (c * MD::<CS>::CS_P2),
@@ -267,12 +267,10 @@ pub fn indices(num_quads: usize) -> Vec<u32> {
 }
 
 pub fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
-    pad_linearize_sized::<62>(x, y, z)
+    pad_linearize_sized::<CS>(x, y, z)
 }
 
 pub fn pad_linearize_sized<const CS: usize>(x: usize, y: usize, z: usize) -> usize {
-    use MeshDataGeneric as MD;
-
     z + 1 + (x + 1)*MD::<CS>::CS_P + (y + 1)*MD::<CS>::CS_P2
 }
 
@@ -280,13 +278,10 @@ pub fn pad_linearize_sized<const CS: usize>(x: usize, y: usize, z: usize) -> usi
 mod tests {
     use alloc::collections::btree_set::BTreeSet;
     use crate as bgm;
+    use bgm::MeshDataGeneric as MD;
     const MASK6: u64 = 0b111_111;
 
-    const CS_P3: usize = 64 * 64 * 64;
-
     const CS_SIZED: usize = 32;
-    const CS_P_SIZED: usize = CS_SIZED + 2;
-    const CS_P3_SIZED: usize = CS_P_SIZED * CS_P_SIZED * CS_P_SIZED;
 
     #[derive(Debug)]
     struct Quad {
@@ -313,7 +308,7 @@ mod tests {
     
     #[test]
     fn doesnt_crash() {
-        let mut voxels = [0; CS_P3];
+        let mut voxels = [0; bgm::CS_P3];
         voxels[bgm::pad_linearize(0, 0, 0)] = 1;
         voxels[bgm::pad_linearize(0, 1, 0)] = 1;
     
@@ -333,7 +328,7 @@ mod tests {
 
     #[test]
     fn doesnt_crash_sized() {
-        let mut voxels = [0; CS_P3_SIZED];
+        let mut voxels = [0; MD::<CS_SIZED>::CS_P3];
         voxels[bgm::pad_linearize_sized::<CS_SIZED>(0, 0, 0)] = 1;
         voxels[bgm::pad_linearize_sized::<CS_SIZED>(0, 1, 0)] = 1;
     
