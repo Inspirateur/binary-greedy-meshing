@@ -16,3 +16,7 @@ criterion = "0.5"
 [[bench]]
 name = "mesh"
 harness = false
+
+[[bench]]
+name = "mesh_32"
+harness = false
