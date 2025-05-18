@@ -7,15 +7,16 @@ mod face;
 
 use alloc::{boxed::Box, collections::btree_set::BTreeSet, vec::Vec};
 pub use face::*;
+/// Default chunk size
 pub const CS: usize = 62;
-const CS_2: usize = CS * CS;
+/// Based on default chunk size (62) with padding
 pub const CS_P: usize = CS + 2;
 pub const CS_P2: usize = CS_P * CS_P;
+/// Size of voxels[] passed to mesh(). Based on default chunk size (62) with padding 
 pub const CS_P3: usize = CS_P * CS_P * CS_P;
 
-
 #[derive(Debug)]
-pub struct MeshData {
+pub struct MeshDataGeneric<const CS: usize> {
     // Output
     pub quads: [Vec<u64>; 6],
     // Internal buffers
@@ -27,11 +28,19 @@ pub struct MeshData {
     right_merged: Box<[u8]>,
 }
 
-impl MeshData {
+pub type MeshData = MeshDataGeneric<62>;
+pub use MeshDataGeneric as MeshDataSized;
+
+impl<const CS: usize> MeshDataGeneric<CS> {
+    pub const CS_P: usize  = CS + 2;
+    const CS_2: usize  = CS * CS;
+    pub const CS_P2: usize = Self::CS_P * Self::CS_P;
+    pub const CS_P3: usize = Self::CS_P * Self::CS_P2;
+
     pub fn new() -> Self {
         Self { 
-            face_masks: vec![0; CS_2*6].into_boxed_slice(), 
-            forward_merged: vec![0; CS_2].into_boxed_slice(), 
+            face_masks: vec![0; Self::CS_2*6].into_boxed_slice(), 
+            forward_merged: vec![0; Self::CS_2].into_boxed_slice(), 
             right_merged: vec![0; CS].into_boxed_slice(), 
             quads: core::array::from_fn(|_| Vec::new()), 
         }
@@ -41,9 +50,7 @@ impl MeshData {
         self.face_masks.fill(0);
         self.forward_merged.fill(0);
         self.right_merged.fill(0);
-        for i in 0..self.quads.len() {
-            self.quads[i].clear();
-        }
+        for q in &mut self.quads { q.clear(); }
     }
 }
 
@@ -53,31 +60,44 @@ fn face_value(v1: u16, v2: u16, transparents: &BTreeSet<u16>) -> u64 {
     (v2 == 0 || (v1 != v2 && transparents.contains(&v2))) as u64
 }
 
-// Passing &mut MeshData instead of returning MeshData allows the caller to reuse buffers
-pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: BTreeSet<u16>) {
-    // Hidden face culling
-    for a in 1..(CS_P-1) {
-        let a_cs_p = a * CS_P;
+pub fn mesh(
+    voxels: &[u16],
+    mesh_data: &mut MeshData,
+    transparents: BTreeSet<u16>,
+) {
+    mesh_sized::<62>(voxels, mesh_data, transparents);
+}
 
-        for b in 1..(CS_P-1) {
-            let ab = (a_cs_p + b) * CS_P;
+// Passing &mut MeshData instead of returning MeshData allows the caller to reuse buffers
+pub fn mesh_sized<const CS: usize>(
+    voxels: &[u16],
+    mesh_data: &mut MeshDataGeneric<CS>,
+    transparents: BTreeSet<u16>,
+) {
+    use MeshDataGeneric as MD;
+    // Hidden face culling
+    for a in 1..(MD::<CS>::CS_P-1) {
+        let a_cs_p = a * MD::<CS>::CS_P;
+
+        for b in 1..(MD::<CS>::CS_P-1) {
+            let ab = (a_cs_p + b) * MD::<CS>::CS_P;
             let ba_index = (b - 1) + (a - 1) * CS;
             let ab_index = (a - 1) + (b - 1) * CS;
 
-            for c in 1..(CS_P-1) {
+            for c in 1..(MD::<CS>::CS_P-1) {
                 let abc = ab + c;
                 let v1 = voxels[abc];
                 if v1 == 0 {
                     continue;
                 }
-                mesh_data.face_masks[ba_index + 0 * CS_2] |= face_value(v1, voxels[abc + CS_P2], &transparents) << (c-1);
-                mesh_data.face_masks[ba_index + 1 * CS_2] |= face_value(v1, voxels[abc - CS_P2], &transparents) << (c-1);
+                mesh_data.face_masks[ba_index + 0 * MD::<CS>::CS_2] |= face_value(v1, voxels[abc + MD::<CS>::CS_P2], &transparents) << (c-1);
+                mesh_data.face_masks[ba_index + 1 * MD::<CS>::CS_2] |= face_value(v1, voxels[abc - MD::<CS>::CS_P2], &transparents) << (c-1);
                 
-                mesh_data.face_masks[ab_index + 2 * CS_2] |= face_value(v1, voxels[abc + CS_P], &transparents) << (c-1);
-                mesh_data.face_masks[ab_index + 3 * CS_2] |= face_value(v1, voxels[abc - CS_P], &transparents) << (c-1);
+                mesh_data.face_masks[ab_index + 2 * MD::<CS>::CS_2] |= face_value(v1, voxels[abc + MD::<CS>::CS_P], &transparents) << (c-1);
+                mesh_data.face_masks[ab_index + 3 * MD::<CS>::CS_2] |= face_value(v1, voxels[abc - MD::<CS>::CS_P], &transparents) << (c-1);
     
-                mesh_data.face_masks[ba_index + 4 * CS_2] |= face_value(v1, voxels[abc + 1], &transparents) << c;
-                mesh_data.face_masks[ba_index + 5 * CS_2] |= face_value(v1, voxels[abc - 1], &transparents) << c;
+                mesh_data.face_masks[ba_index + 4 * MD::<CS>::CS_2] |= face_value(v1, voxels[abc + 1], &transparents) << c;
+                mesh_data.face_masks[ba_index + 5 * MD::<CS>::CS_2] |= face_value(v1, voxels[abc - 1], &transparents) << c;
             }
         }
     }
@@ -87,7 +107,7 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: BTreeSet<u16
         let axis = face / 2;
 
         for layer in 0..CS {
-            let bits_location = layer * CS + face * CS_2;
+            let bits_location = layer * CS + face * MD::<CS>::CS_2;
 
             for forward in 0..CS {
                 let mut bits_here = mesh_data.face_masks[forward + bits_location];
@@ -103,9 +123,9 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: BTreeSet<u16
                 while bits_here != 0 {
                     let bit_pos = bits_here.trailing_zeros() as usize;
 
-                    let v_type = voxels[get_axis_index(axis, forward + 1, bit_pos + 1, layer + 1)];
+                    let v_type = voxels[get_axis_index::<CS>(axis, forward + 1, bit_pos + 1, layer + 1)];
 
-                    if (bits_next >> bit_pos & 1) != 0 && v_type == voxels[get_axis_index(axis, forward + 2, bit_pos + 1, layer + 1)] {
+                    if (bits_next >> bit_pos & 1) != 0 && v_type == voxels[get_axis_index::<CS>(axis, forward + 2, bit_pos + 1, layer + 1)] {
                         mesh_data.forward_merged[bit_pos] += 1;
                         bits_here &= !(1 << bit_pos);
                         continue;
@@ -114,7 +134,7 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: BTreeSet<u16
                     for right in (bit_pos+1)..CS {
                         if (bits_here >> right & 1) == 0 
                             || mesh_data.forward_merged[bit_pos]  != mesh_data.forward_merged[right] 
-                            || v_type != voxels[get_axis_index(axis, forward + 1, right + 1, layer + 1)] 
+                            || v_type != voxels[get_axis_index::<CS>(axis, forward + 1, right + 1, layer + 1)] 
                         {
                             break;
                         }
@@ -153,8 +173,8 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: BTreeSet<u16
         let axis = face / 2;
 
         for forward in 0..CS {
-            let bits_location = forward * CS + face * CS_2;
-            let bits_forward_location = (forward + 1) * CS + face * CS_2;
+            let bits_location = forward * CS + face * MD::<CS>::CS_2;
+            let bits_forward_location = (forward + 1) * CS + face * MD::<CS>::CS_2;
 
             for right in 0..CS {
                 let mut bits_here = mesh_data.face_masks[right + bits_location];
@@ -171,18 +191,18 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: BTreeSet<u16
 
                     bits_here &= !(1 << bit_pos);
 
-                    let v_type = voxels[get_axis_index(axis, right + 1, forward + 1, bit_pos)];
+                    let v_type = voxels[get_axis_index::<CS>(axis, right + 1, forward + 1, bit_pos)];
                     let forward_merge_i = right_cs + (bit_pos - 1);
                     let right_merged_ref = &mut mesh_data.right_merged[bit_pos - 1];
 
-                    if *right_merged_ref == 0 && (bits_forward >> bit_pos & 1) != 0 && v_type == voxels[get_axis_index(axis, right + 1, forward + 2, bit_pos)] {
+                    if *right_merged_ref == 0 && (bits_forward >> bit_pos & 1) != 0 && v_type == voxels[get_axis_index::<CS>(axis, right + 1, forward + 2, bit_pos)] {
                         mesh_data.forward_merged[forward_merge_i] += 1;
                         continue;
                     }
 
                     if (bits_right >> bit_pos & 1) != 0 
                         && mesh_data.forward_merged[forward_merge_i] == mesh_data.forward_merged[(right_cs + CS) + (bit_pos - 1)] 
-                        && v_type == voxels[get_axis_index(axis, right + 2, forward + 1, bit_pos)] 
+                        && v_type == voxels[get_axis_index::<CS>(axis, right + 2, forward + 1, bit_pos)] 
                     {
                         mesh_data.forward_merged[forward_merge_i] = 0;
                         *right_merged_ref += 1;
@@ -215,12 +235,13 @@ pub fn mesh(voxels: &[u16], mesh_data: &mut MeshData, transparents: BTreeSet<u16
 }
 
 #[inline]
-fn get_axis_index(axis: usize, a: usize, b: usize, c: usize) -> usize {
+fn get_axis_index<const CS: usize>(axis: usize, a: usize, b: usize, c: usize) -> usize {
+    use MeshDataGeneric as MD;
     // TODO: figure out how to shuffle this around to make it work with YZX
     match axis {
-        0 => b + (a * CS_P) + (c * CS_P2),
-        1 => b + (c * CS_P) + (a * CS_P2),
-        _ => c + (a * CS_P) + (b * CS_P2)
+        0 => b + (a * MD::<CS>::CS_P) + (c * MD::<CS>::CS_P2),
+        1 => b + (c * MD::<CS>::CS_P) + (a * MD::<CS>::CS_P2),
+        _ => c + (a * MD::<CS>::CS_P) + (b * MD::<CS>::CS_P2)
     }
 }
 
@@ -246,7 +267,13 @@ pub fn indices(num_quads: usize) -> Vec<u32> {
 }
 
 pub fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
-    z + 1 + (x + 1)*CS_P + (y + 1)*CS_P2
+    pad_linearize_sized::<62>(x, y, z)
+}
+
+pub fn pad_linearize_sized<const CS: usize>(x: usize, y: usize, z: usize) -> usize {
+    use MeshDataGeneric as MD;
+
+    z + 1 + (x + 1)*MD::<CS>::CS_P + (y + 1)*MD::<CS>::CS_P2
 }
 
 #[cfg(test)]
@@ -254,6 +281,12 @@ mod tests {
     use alloc::collections::btree_set::BTreeSet;
     use crate as bgm;
     const MASK6: u64 = 0b111_111;
+
+    const CS_P3: usize = 64 * 64 * 64;
+
+    const CS_SIZED: usize = 32;
+    const CS_P_SIZED: usize = CS_SIZED + 2;
+    const CS_P3_SIZED: usize = CS_P_SIZED * CS_P_SIZED * CS_P_SIZED;
 
     #[derive(Debug)]
     struct Quad {
@@ -280,13 +313,33 @@ mod tests {
     
     #[test]
     fn doesnt_crash() {
-        let mut voxels = [0; bgm::CS_P3];
+        let mut voxels = [0; CS_P3];
         voxels[bgm::pad_linearize(0, 0, 0)] = 1;
         voxels[bgm::pad_linearize(0, 1, 0)] = 1;
     
         let mut mesh_data = bgm::MeshData::new();
 
         bgm::mesh(&voxels, &mut mesh_data, BTreeSet::default());
+        // mesh_data.quads is the output
+        /*/
+        for (i, quads) in mesh_data.quads.iter().enumerate() {
+            println!("--- Face {i} ---");
+            for quad in quads {
+                println!("{:?}", Quad::from(*quad));
+            }
+        }
+        */
+    }
+
+    #[test]
+    fn doesnt_crash_sized() {
+        let mut voxels = [0; CS_P3_SIZED];
+        voxels[bgm::pad_linearize_sized::<CS_SIZED>(0, 0, 0)] = 1;
+        voxels[bgm::pad_linearize_sized::<CS_SIZED>(0, 1, 0)] = 1;
+    
+        let mut mesh_data = bgm::MeshDataSized::<CS_SIZED>::new();
+
+        bgm::mesh_sized::<CS_SIZED>(&voxels, &mut mesh_data, BTreeSet::default());
         // mesh_data.quads is the output
         /*/
         for (i, quads) in mesh_data.quads.iter().enumerate() {
