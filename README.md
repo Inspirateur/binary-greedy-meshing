@@ -45,4 +45,28 @@ This is coherent with the 50-200μs range (without transparency) reported from t
 
 The meshing is also ~10x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~4.5ms** to greedy mesh a chunk on my machine.
 
-*chunk sizes are 62^3 (64^3 with padding), this crate doesn't support other sizes.*
+*chunk sizes are 62^3 (64^3 with padding) by default, this crate supports other sizes using const-generic*
+
+### Minimal example with 32^3 chunk size
+```rust
+use binary_greedy_meshing as bgm;
+use std::collections::BTreeSet;
+
+fn main() {
+    const CHUNK_SIZE: usize = 32;
+    // MeshDataGeneric is the path with const-generic parameters
+    use bgm::MeshDataGeneric as MD;
+    // This is a flattened 3D array of u16 in ZXY order, of size (CHUNK_SIZE + 2)^3 
+    // (it represents a CHUNK_SIZE^3-sized chunk that is padded with neighbor information)
+    let mut voxels = [0; MD::<CHUNK_SIZE>::CS_P3];
+    // Add 2 voxels at position 0;0;0 and 0;1;0
+    voxels[bgm::pad_linearize_sized::<CHUNK_SIZE>(0, 0, 0)] = 1;
+    voxels[bgm::pad_linearize_sized::<CHUNK_SIZE>(0, 1, 0)] = 1;
+    // Contain useful buffers that can be cached and cleared 
+    // with mesh_data.clear() to avoid re-allocation
+    let mut mesh_data = bgm::MeshDataSized::<CHUNK_SIZE>::new();
+    // Does the meshing, mesh_data.quads is the output
+    // transparent block values are signaled by putting them in the BTreeSet
+    bgm::mesh_sized::<CHUNK_SIZE>(&voxels, &mut mesh_data, BTreeSet::default());
+}
+```
