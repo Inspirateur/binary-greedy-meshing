@@ -34,12 +34,18 @@ pub use MeshDataGeneric as MeshDataSized;
 use MeshDataGeneric as MD;
 
 impl<const CS: usize> MeshDataGeneric<CS> {
+    const CS_CHECK: usize = {
+        assert!(CS <= 62, "62 is the maximum chunk size!");
+        0
+    };
+
     pub const CS_P: usize  = CS + 2;
     const CS_2: usize  = CS * CS;
     pub const CS_P2: usize = Self::CS_P * Self::CS_P;
     pub const CS_P3: usize = Self::CS_P * Self::CS_P2;
 
     pub fn new() -> Self {
+        let _ = Self::CS_CHECK;
         Self { 
             face_masks: vec![0; Self::CS_2*6].into_boxed_slice(), 
             forward_merged: vec![0; Self::CS_2].into_boxed_slice(), 
@@ -76,6 +82,7 @@ pub fn mesh_sized<const CS: usize>(
     mesh_data: &mut MeshDataGeneric<CS>,
     transparents: BTreeSet<u16>,
 ) {
+    let _ = MD::<CS>::CS_CHECK;
     // Hidden face culling
     for a in 1..(MD::<CS>::CS_P-1) {
         let a_cs_p = a * MD::<CS>::CS_P;
@@ -271,6 +278,7 @@ pub fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
 }
 
 pub fn pad_linearize_sized<const CS: usize>(x: usize, y: usize, z: usize) -> usize {
+    let _ = MD::<CS>::CS_CHECK;
     z + 1 + (x + 1)*MD::<CS>::CS_P + (y + 1)*MD::<CS>::CS_P2
 }
 
