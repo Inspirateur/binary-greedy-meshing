@@ -26,11 +26,12 @@ fn main() {
     // 2 methods are available for the meshing:
     // The "mesh" method only takes the voxel buffer and a BTreeSet signaling the transparent values
     // mesher.mesh(&voxels, transparent_blocks);
-    // The "fast_mesh" method is ~4x faster but requires maintaining an opacity and transparency mask for the chunk
+    // The "fast_mesh" method is ~4x faster
+    // but requires maintaining an opacity and transparency mask for the chunk
     let opaque_mask = bgm::compute_opaque_mask(voxels.as_slice(), &transparent_blocks);
     let trans_mask = bgm::compute_transparent_mask(voxels.as_slice(), &transparent_blocks);
     mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
-    // Both methods have the same "output" which is stored in mesher.quads (see below for understanding the output)
+    // Both methods have the same "output" which is stored in mesher.quads
 }
 ```
 
