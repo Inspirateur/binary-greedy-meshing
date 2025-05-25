@@ -13,15 +13,24 @@ fn main() {
     // This is a flattened 3D array of u16 in ZXY order, of size 64^3 
     // (it represents a 62^3-sized chunk that is padded with neighbor information)
     let mut voxels = [0; bgm::CS_P3];
-    // Add 2 voxels at position 0;0;0 and 0;1;0
+    // Add 2 voxels of value "1" at position 0;0;0 and 0;1;0
     voxels[bgm::pad_linearize(0, 0, 0)] = 1;
     voxels[bgm::pad_linearize(0, 1, 0)] = 1;
+    // Add 1 voxel of value "2" at position 0;2;0
+    voxels[bgm::pad_linearize(0, 1, 0)] = 2;
+    // Say the value 2 is transparent
+    let transparent_blocks = BTreeSet::from([2]);
     // Contain useful buffers that can be cached and cleared 
     // with mesh_data.clear() to avoid re-allocation
-    let mut mesh_data = bgm::MeshData::new();
-    // Does the meshing, mesh_data.quads is the output
-    // transparent block values are signaled by putting them in the BTreeSet
-    bgm::mesh(&voxels, &mut mesh_data, BTreeSet::default());
+    let mut mesher = bgm::MeshData::new();
+    // 2 methods are available for the meshing:
+    // The "mesh" method only takes the voxel buffer and a BTreeSet signaling the transparent values
+    // mesher.mesh(&voxels, transparent_blocks);
+    // The "fast_mesh" method is ~4x faster but requires maintaining an opacity and transparency mask for the chunk
+    let opaque_mask = bgm::compute_opaque_mask(voxels.as_slice(), &transparent_blocks);
+    let trans_mask = bgm::compute_transparent_mask(voxels.as_slice(), &transparent_blocks);
+    mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
+    // Both methods have the same "output" which is stored in mesher.quads (see below for understanding the output)
 }
 ```
 
@@ -37,12 +46,15 @@ The fastest way of rendering quads is using instancing (check [this video](https
 - [src/render/mesh_utils.rs](https://github.com/Inspirateur/riverbed/blob/main/src/render/mesh_utils.rs) for Face+Quad => vertices conversion
 - [src/render/mesh_chunks.rs](https://github.com/Inspirateur/riverbed/blob/main/src/render/mesh_chunks.rs) for the rest of the meshing code (+ LOD)
 
-## Performance
-Benching the crate on Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz:
-- meshing (with transparency support): **400μs**
+## Benchmarks
+running `cargo bench` on AMD Ryzen 5 5500 3.60 GHz:
+- "fast_mesh" with opaque voxels only: **60 µs**
+- "mesh" with opaque voxels only: **300 µs**
+- "fast_mesh" with opaque & transparents voxels: **85 µs**
+- "mesh" with opaque & transparents voxels: **310 µs**
 
-This is coherent with the 50-200μs range (without transparency) reported from the original C version of the library, as transparency incurrs a significant cost in the hidden face culling phase.
+This is in line with the 50-200μs performance range reported from the original C version of the library  (which doesn't yet support transparency).
 
-The meshing is also ~10x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~4.5ms** to greedy mesh a chunk on my machine.
+The meshing is also ~30x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~3ms** to greedy mesh a chunk on my machine.
 
 *chunk sizes are 62^3 (64^3 with padding), this crate doesn't support other sizes.*
