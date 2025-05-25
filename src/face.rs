@@ -1,4 +1,5 @@
-const MASK_6: u64 = 0b111111;
+use crate::MASK_6;
+
 const MASK_XYZ: u64 = 0b111111_111111_111111;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]

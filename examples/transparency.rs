@@ -37,6 +37,22 @@ fn main() {
         .run();
 }
 
+/// 0 = Air, 1 = Solid, 2 = transparent, 3 = other transparent
+/// This returns a "sandwich" with 1 solid layer and 2 transparent layers
+fn transparent_sandwich(x: usize, y: usize, z: usize) -> u16 {
+    if y > SIZE || z > SIZE {
+        return 0;
+    }
+    if x < LAYER_W {
+        return 1;
+    } else if x < LAYER_W * 2 {
+        return 2;
+    } else if x < LAYER_W * 3 {
+        return 3;
+    };
+    0
+}
+
 fn setup(
     mut commands: Commands,
     mut wireframe_config: ResMut<WireframeConfig>,
@@ -62,29 +78,26 @@ fn setup(
     let solid_mesh = Mesh3d(meshes.add(solid_mesh));
     let transp_mesh1 = Mesh3d(meshes.add(transp_mesh1));
     let transp_mesh2 = Mesh3d(meshes.add(transp_mesh2));
-
     commands.spawn((
         solid_mesh,
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0., 0., 0.8, 1.0),
+            base_color: Color::linear_rgba(0.8, 0.8, 0.8, 1.0),
             alpha_mode: AlphaMode::AlphaToCoverage,
             ..Default::default()
         })),
     ));
-
     commands.spawn((
         transp_mesh1,
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(1., 0.5, 0.5, 0.2),
+            base_color: Color::linear_rgba(1., 0.3, 0.3, 0.3),
             alpha_mode: AlphaMode::AlphaToCoverage,
             ..Default::default()
         })),
     ));
-
     commands.spawn((
         transp_mesh2,
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0.5, 1., 0.5, 0.2),
+            base_color: Color::linear_rgba(0.3, 1., 0.3, 0.3),
             alpha_mode: AlphaMode::AlphaToCoverage,
             ..Default::default()
         })),
@@ -100,22 +113,26 @@ fn setup(
 /// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead
 fn generate_meshes() -> [Mesh; 3] {
     let voxels = voxel_buffer();
-    let mut mesh_data = bgm::MeshData::new();
-
-    bgm::mesh(&voxels, &mut mesh_data, BTreeSet::from([2, 3]));
+    let mut mesher = bgm::Mesher::new();
+    let mut transparent_blocks = BTreeSet::new();
+    transparent_blocks.insert(2);
+    transparent_blocks.insert(3);
+    let opaque_mask = bgm::compute_opaque_mask(&voxels, &transparent_blocks);
+    let trans_mask = bgm::compute_trans_mask(&voxels, &transparent_blocks);
+    mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
     let mut positions: [_; 3] = core::array::from_fn(|_| Vec::new());
     let mut normals: [_; 3] = core::array::from_fn(|_| Vec::new());
     let mut indices: [_; 3] = core::array::from_fn(|_| Vec::new());
-    for (face_n, quads) in mesh_data.quads.iter().enumerate() {
+    for (face_n, quads) in mesher.quads.iter().enumerate() {
         let face: bgm::Face = (face_n as u8).into();
         let n = face.n();
-        for quad in quads {
+        for &quad in quads {
             let voxel_i = (quad >> 32) as usize - 1;
-            let vertices_packed = face.vertices_packed(*quad);
-            for vertex_packed in vertices_packed.iter() {
-                let x = *vertex_packed & MASK6;
-                let y = (*vertex_packed >> 6) & MASK6;
-                let z = (*vertex_packed >> 12) & MASK6;
+            let vertices_packed = face.vertices_packed(quad);
+            for &vertex_packed in vertices_packed.iter() {
+                let x = vertex_packed & MASK6;
+                let y = (vertex_packed >> 6) & MASK6;
+                let z = (vertex_packed >> 12) & MASK6;
                 positions[voxel_i].push([x as f32, y as f32, z as f32]);
                 normals[voxel_i].push(n.clone());
             }
@@ -127,7 +144,7 @@ fn generate_meshes() -> [Mesh; 3] {
     core::array::from_fn(|i| {
         let mut mesh = Mesh::new(
             PrimitiveTopology::TriangleList,
-            RenderAssetUsages::RENDER_WORLD,
+            RenderAssetUsages::all(),
         );
         mesh.insert_attribute(
             Mesh::ATTRIBUTE_POSITION,
@@ -156,20 +173,4 @@ fn voxel_buffer() -> [u16; bgm::CS_P3] {
         }
     }
     voxels
-}
-
-/// 0 = Air, 1 = Solid, 2 = transparent, 3 = other transparent
-/// This returns a "sandwich" with 1 solid layer and 2 transparent layers
-fn transparent_sandwich(x: usize, y: usize, z: usize) -> u16 {
-    if y > SIZE || z > SIZE {
-        return 0;
-    }
-    if x < LAYER_W {
-        return 1;
-    } else if x < LAYER_W * 2 {
-        return 2;
-    } else if x < LAYER_W * 3 {
-        return 3;
-    };
-    0
 }

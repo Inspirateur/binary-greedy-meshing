@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use bevy::{
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
@@ -10,7 +12,6 @@ use bevy::{
     },
 };
 use binary_greedy_meshing as bgm;
-use std::collections::BTreeSet;
 
 pub const ATTRIBUTE_VOXEL_DATA: MeshVertexAttribute =
     MeshVertexAttribute::new("VoxelData", 48757581, VertexFormat::Uint32x2);
@@ -78,12 +79,13 @@ fn setup(
 /// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead
 fn generate_mesh() -> Mesh {
     let voxels = voxel_buffer();
-    let mut mesh_data = bgm::MeshData::new();
-
-    bgm::mesh(&voxels, &mut mesh_data, BTreeSet::from([2, 3]));
+    let mut mesher = bgm::Mesher::new();
+    let opaque_mask = bgm::compute_opaque_mask(&voxels, &BTreeSet::new());
+    let trans_mask = vec![0; bgm::CS_P2].into_boxed_slice();
+    mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
     let mut positions = Vec::new();
     let mut normals = Vec::new();
-    for (face_n, quads) in mesh_data.quads.iter().enumerate() {
+    for (face_n, quads) in mesher.quads.iter().enumerate() {
         let face: bgm::Face = (face_n as u8).into();
         let n = face.n();
         for quad in quads {
