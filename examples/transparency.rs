@@ -118,7 +118,7 @@ fn generate_meshes() -> [Mesh; 3] {
     transparent_blocks.insert(2);
     transparent_blocks.insert(3);
     let opaque_mask = bgm::compute_opaque_mask(&voxels, &transparent_blocks);
-    let trans_mask = bgm::compute_trans_mask(&voxels, &transparent_blocks);
+    let trans_mask = bgm::compute_transparent_mask(&voxels, &transparent_blocks);
     mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
     let mut positions: [_; 3] = core::array::from_fn(|_| Vec::new());
     let mut normals: [_; 3] = core::array::from_fn(|_| Vec::new());

@@ -362,7 +362,7 @@ pub fn compute_opaque_mask(voxels: &[u16], transparents: &BTreeSet<u16>) -> Box<
 }
 
 /// Compute a transparent mask from a voxel buffer and a BTreeSet specifying which voxel values are transparent
-pub fn compute_trans_mask(voxels: &[u16], transparents: &BTreeSet<u16>) -> Box<[u64]> {
+pub fn compute_transparent_mask(voxels: &[u16], transparents: &BTreeSet<u16>) -> Box<[u64]> {
     let mut trans_mask = vec![0; CS_P2].into_boxed_slice();
     // Fill the opacity mask
     for (i, voxel) in voxels.iter().enumerate() {
@@ -408,7 +408,7 @@ mod tests {
         let voxels = test_buffer();
         let transparent_blocks = BTreeSet::from([2]);
         let opaque_mask = bgm::compute_opaque_mask(voxels.as_slice(), &BTreeSet::new());
-        let trans_mask = bgm::compute_trans_mask(voxels.as_slice(), &transparent_blocks);
+        let trans_mask = bgm::compute_transparent_mask(voxels.as_slice(), &transparent_blocks);
         let mut mesher1 = bgm::Mesher::new();
         mesher1.mesh(voxels.as_slice(), &transparent_blocks);
         let mut mesher2 = bgm::Mesher::new();
