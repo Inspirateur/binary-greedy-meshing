@@ -139,7 +139,7 @@ fn generate_meshes() -> [Mesh; 3] {
         }
     }
     for i in 0..positions.len() {
-        indices[i] = bgm::indices(positions[i].len());
+        indices[i] = bgm::indices(positions[i].len() / 4);
     }
     core::array::from_fn(|i| {
         let mut mesh = Mesh::new(
