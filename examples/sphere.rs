@@ -99,7 +99,7 @@ fn generate_mesh() -> Mesh {
             }
         }
     }
-    let indices = bgm::indices(positions.len());
+    let indices = bgm::indices(positions.len() / 4);
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
