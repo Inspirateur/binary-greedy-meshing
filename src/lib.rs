@@ -106,24 +106,17 @@ impl Mesher {
                 self.face_masks[back_faces] = opaque_col & !(opaque_mask[ab] << 1);
                 
                 // check if there's transparent blocks in this column 
-                let trans_col = trans_mask[ab] & P_MASK;
-                if trans_col == 0 {
+                let mut bits_here = trans_mask[ab] & P_MASK;
+                if bits_here == 0 {
                     continue;
                 }
                 // Block-wise transparent step
                 // The transparent step is slower than the opaque step 
                 // because we need to check if neighboring transparent blocks are differents (we don't care about that for opaque blocks)
                 let ab_ = ab*CS_P;
-                let trans_start = trans_col.trailing_zeros() as usize;
-                let trans_end= u64::BITS as usize-trans_col.leading_zeros() as usize;
-                let mut cmask = 1u64 << trans_start;
-                for c in trans_start..trans_end {
-                    // check if block at pos abc is transparent
-                    if trans_col & cmask == 0 {
-                        cmask <<= 1;
-                        continue;
-                    }
-                    cmask <<= 1;
+                while bits_here != 0 {
+                    let c = bits_here.trailing_zeros() as usize;
+                    bits_here &= !(1 << c);
                     let abc = ab_ + c;
                     let v1 = voxels[abc];
                     self.face_masks[up_faces] |= ((v1 != voxels[abc + CS_P2]) as u64) << (c-1);
