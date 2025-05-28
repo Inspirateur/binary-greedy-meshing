@@ -120,6 +120,7 @@ impl Mesher {
                 for c in trans_start..trans_end {
                     // check if block at pos abc is transparent
                     if trans_col & cmask == 0 {
+                        cmask <<= 1;
                         continue;
                     }
                     cmask <<= 1;
