@@ -43,7 +43,7 @@ impl Face {
             Self::Right => [1., 0., 0.],
             Self::Left => [-1., 0., 0.],
             Self::Front => [0., 0., 1.],
-            Self::Back => [0., 0., -1.], 
+            Self::Back => [0., 0., -1.],
         }
     }
 
@@ -56,38 +56,38 @@ impl Face {
         match self {
             Face::Left => [
                 vertex_info(xyz, h, w),
-                vertex_info(xyz+packed_xyz(0, 0, h), 0, w),
-                vertex_info(xyz+packed_xyz(0, w, 0), h, 0),
-                vertex_info(xyz+packed_xyz(0, w, h), 0, 0),
+                vertex_info(xyz + packed_xyz(0, 0, h), 0, w),
+                vertex_info(xyz + packed_xyz(0, w, 0), h, 0),
+                vertex_info(xyz + packed_xyz(0, w, h), 0, 0),
             ],
             Face::Down => [
-                vertex_info(xyz-packed_xyz(w, 0, 0)+packed_xyz(0, 0, h), w, h),
-                vertex_info(xyz-packed_xyz(w, 0, 0), w, 0),
-                vertex_info(xyz+packed_xyz(0, 0, h), 0, h),
+                vertex_info(xyz - packed_xyz(w, 0, 0) + packed_xyz(0, 0, h), w, h),
+                vertex_info(xyz - packed_xyz(w, 0, 0), w, 0),
+                vertex_info(xyz + packed_xyz(0, 0, h), 0, h),
                 vertex_info(xyz, 0, 0),
             ],
             Face::Back => [
                 vertex_info(xyz, w, h),
-                vertex_info(xyz+packed_xyz(0, h, 0), w, 0),
-                vertex_info(xyz+packed_xyz(w, 0, 0), 0, h),
-                vertex_info(xyz+packed_xyz(w, h, 0), 0, 0),
+                vertex_info(xyz + packed_xyz(0, h, 0), w, 0),
+                vertex_info(xyz + packed_xyz(w, 0, 0), 0, h),
+                vertex_info(xyz + packed_xyz(w, h, 0), 0, 0),
             ],
             Face::Right => [
                 vertex_info(xyz, 0, 0),
-                vertex_info(xyz+packed_xyz(0, 0, h), h, 0),
-                vertex_info(xyz-packed_xyz(0, w, 0), 0, w),
-                vertex_info(xyz+packed_xyz(0, 0, h)-packed_xyz(0, w, 0), h, w),
+                vertex_info(xyz + packed_xyz(0, 0, h), h, 0),
+                vertex_info(xyz - packed_xyz(0, w, 0), 0, w),
+                vertex_info(xyz + packed_xyz(0, 0, h) - packed_xyz(0, w, 0), h, w),
             ],
             Face::Up => [
-                vertex_info(xyz+packed_xyz(w, 0, h), w, h),
-                vertex_info(xyz+packed_xyz(w, 0, 0), w, 0),
-                vertex_info(xyz+packed_xyz(0, 0, h), 0, h),
+                vertex_info(xyz + packed_xyz(w, 0, h), w, h),
+                vertex_info(xyz + packed_xyz(w, 0, 0), w, 0),
+                vertex_info(xyz + packed_xyz(0, 0, h), 0, h),
                 vertex_info(xyz, 0, 0),
             ],
             Face::Front => [
-                vertex_info(xyz-packed_xyz(w, 0, 0)+packed_xyz(0, h, 0), 0, 0),
-                vertex_info(xyz-packed_xyz(w, 0, 0), 0, h),
-                vertex_info(xyz+packed_xyz(0, h, 0), w, 0),
+                vertex_info(xyz - packed_xyz(w, 0, 0) + packed_xyz(0, h, 0), 0, 0),
+                vertex_info(xyz - packed_xyz(w, 0, 0), 0, h),
+                vertex_info(xyz + packed_xyz(0, h, 0), w, 0),
                 vertex_info(xyz, w, h),
             ],
         }
