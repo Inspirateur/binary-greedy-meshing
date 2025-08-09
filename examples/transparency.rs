@@ -4,11 +4,11 @@ use bevy::{
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
     render::{
+        RenderPlugin,
         mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues},
         render_asset::RenderAssetUsages,
         render_resource::VertexFormat,
         settings::{RenderCreation, WgpuFeatures, WgpuSettings},
-        RenderPlugin,
     },
 };
 use binary_greedy_meshing as bgm;
@@ -142,10 +142,7 @@ fn generate_meshes() -> [Mesh; 3] {
         indices[i] = bgm::indices(positions[i].len() / 4);
     }
     core::array::from_fn(|i| {
-        let mut mesh = Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::all(),
-        );
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
         mesh.insert_attribute(
             Mesh::ATTRIBUTE_POSITION,
             VertexAttributeValues::Float32x3(positions[i].clone()),

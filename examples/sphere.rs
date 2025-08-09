@@ -4,11 +4,11 @@ use bevy::{
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
     render::{
+        RenderPlugin,
         mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues},
         render_asset::RenderAssetUsages,
         render_resource::VertexFormat,
         settings::{RenderCreation, WgpuFeatures, WgpuSettings},
-        RenderPlugin,
     },
 };
 use binary_greedy_meshing as bgm;
