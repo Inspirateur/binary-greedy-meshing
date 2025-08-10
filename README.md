@@ -49,10 +49,10 @@ The fastest way of rendering quads is using instancing (check [this video](https
 
 ## Benchmarks
 running `cargo bench` on AMD Ryzen 5 5500 3.60 GHz:
-- "fast_mesh" with opaque voxels only: **60 µs**
+- "fast_mesh" with opaque voxels only: **65 µs**
 - "mesh" with opaque voxels only: **300 µs**
-- "fast_mesh" with opaque & transparents voxels: **85 µs**
-- "mesh" with opaque & transparents voxels: **310 µs**
+- "fast_mesh" with opaque & transparents voxels: **90 µs**
+- "mesh" with opaque & transparents voxels: **340 µs**
 
 This is in line with the 50-200μs performance range reported from the original C version of the library  (which doesn't yet support transparency).
 
