@@ -92,6 +92,7 @@ impl Mesher {
                 // Column-wise opaque step
                 let ab = a_ + b;
                 let opaque_col = opaque_mask[ab] & P_MASK;
+                let unpadded_opaque_col = opaque_col >> 1;
                 let ba_index = (b - 1) + (a - 1) * CS;
                 let ab_index = (a - 1) + (b - 1) * CS;
                 let up_faces = ba_index + 0 * CS_2;
@@ -100,15 +101,20 @@ impl Mesher {
                 let left_faces = ab_index + 3 * CS_2;
                 let front_faces = ba_index + 4 * CS_2;
                 let back_faces = ba_index + 5 * CS_2;
+                let not_front_col = !opaque_mask[ab + CS_P] >> 1;
+                let not_back_col = !opaque_mask[ab - CS_P] >> 1;
+                let not_right_col = !opaque_mask[ab + 1] >> 1;
+                let not_left_col = !opaque_mask[ab - 1] >> 1;
+                let not_col_up = !(opaque_mask[ab] >> 1);
+                let not_col_down = !(opaque_mask[ab] << 1);
+                self.face_masks[up_faces] = unpadded_opaque_col & not_front_col;
+                self.face_masks[down_faces] = unpadded_opaque_col & not_back_col;
 
-                self.face_masks[up_faces] = (opaque_col & !opaque_mask[ab + CS_P]) >> 1;
-                self.face_masks[down_faces] = (opaque_col & !opaque_mask[ab - CS_P]) >> 1;
+                self.face_masks[right_faces] = unpadded_opaque_col & not_right_col;
+                self.face_masks[left_faces] = unpadded_opaque_col & not_left_col;
 
-                self.face_masks[right_faces] = (opaque_col & !opaque_mask[ab + 1]) >> 1;
-                self.face_masks[left_faces] = (opaque_col & !opaque_mask[ab - 1]) >> 1;
-
-                self.face_masks[front_faces] = opaque_col & !(opaque_mask[ab] >> 1);
-                self.face_masks[back_faces] = opaque_col & !(opaque_mask[ab] << 1);
+                self.face_masks[front_faces] = opaque_col & not_col_up;
+                self.face_masks[back_faces] = opaque_col & not_col_down;
 
                 // check if there's transparent blocks in this column
                 let mut bits_here = trans_mask[ab] & P_MASK;
@@ -121,17 +127,19 @@ impl Mesher {
                 let ab_ = ab * CS_P;
                 while bits_here != 0 {
                     let c = bits_here.trailing_zeros() as usize;
-                    bits_here &= !(1 << c);
+                    let c_mask = 1 << c;
+                    let unpadded_c_mask = c_mask >> 1;
+                    bits_here &= !(c_mask);
                     let abc = ab_ + c;
                     let v1 = voxels[abc];
-                    self.face_masks[up_faces] |= ((v1 != voxels[abc + CS_P2]) as u64) << (c - 1);
-                    self.face_masks[down_faces] |= ((v1 != voxels[abc - CS_P2]) as u64) << (c - 1);
+                    self.face_masks[up_faces] |= not_front_col & unpadded_c_mask & ((v1 != voxels[abc + CS_P2]) as u64) << (c - 1);
+                    self.face_masks[down_faces] |= not_back_col & unpadded_c_mask & ((v1 != voxels[abc - CS_P2]) as u64) << (c - 1);
 
-                    self.face_masks[right_faces] |= ((v1 != voxels[abc + CS_P]) as u64) << (c - 1);
-                    self.face_masks[left_faces] |= ((v1 != voxels[abc - CS_P]) as u64) << (c - 1);
+                    self.face_masks[right_faces] |= not_right_col & unpadded_c_mask & ((v1 != voxels[abc + CS_P]) as u64) << (c - 1);
+                    self.face_masks[left_faces] |= not_left_col & unpadded_c_mask & ((v1 != voxels[abc - CS_P]) as u64) << (c - 1);
 
-                    self.face_masks[front_faces] |= ((v1 != voxels[abc + 1]) as u64) << c;
-                    self.face_masks[back_faces] |= ((v1 != voxels[abc - 1]) as u64) << c;
+                    self.face_masks[front_faces] |= not_col_up & c_mask & ((v1 != voxels[abc + 1]) as u64) << c;
+                    self.face_masks[back_faces] |= not_col_down & c_mask & ((v1 != voxels[abc - 1]) as u64) << c;
                 }
             }
         }
