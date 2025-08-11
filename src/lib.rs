@@ -4,20 +4,23 @@
 extern crate alloc;
 
 mod face;
-use alloc::{boxed::Box, collections::btree_set::BTreeSet, string::String, vec::Vec};
+mod quad;
+
+use alloc::{boxed::Box, collections::btree_set::BTreeSet, vec::Vec};
+
 pub use face::*;
+pub use quad::*;
 pub const CS: usize = 62;
 const CS_2: usize = CS * CS;
 pub const CS_P: usize = CS + 2;
 pub const CS_P2: usize = CS_P * CS_P;
 pub const CS_P3: usize = CS_P * CS_P * CS_P;
 const P_MASK: u64 = !(1 << 63 | 1);
-pub(crate) const MASK_6: u64 = 0b111111;
 
 #[derive(Debug)]
 pub struct Mesher {
     // Output
-    pub quads: [Vec<u64>; 6],
+    pub quads: [Vec<Quad>; 6],
     // Internal buffers
     /// CS_2 * 6
     face_masks: Box<[u64]>,
@@ -208,7 +211,7 @@ impl Mesher {
                         let v_type = v_type as usize;
 
                         let quad = match face {
-                            0 => get_quad(
+                            0 => Quad::pack(
                                 mesh_front,
                                 mesh_up,
                                 mesh_left,
@@ -216,7 +219,7 @@ impl Mesher {
                                 mesh_width,
                                 v_type,
                             ),
-                            1 => get_quad(
+                            1 => Quad::pack(
                                 mesh_front + mesh_length as usize,
                                 mesh_up,
                                 mesh_left,
@@ -224,7 +227,7 @@ impl Mesher {
                                 mesh_width,
                                 v_type,
                             ),
-                            2 => get_quad(
+                            2 => Quad::pack(
                                 mesh_up,
                                 mesh_front + mesh_length as usize,
                                 mesh_left,
@@ -232,7 +235,7 @@ impl Mesher {
                                 mesh_width,
                                 v_type,
                             ),
-                            3 => get_quad(
+                            3 => Quad::pack(
                                 mesh_up,
                                 mesh_front,
                                 mesh_left,
@@ -313,7 +316,7 @@ impl Mesher {
                         self.forward_merged[forward_merge_i] = 0;
                         *right_merged_ref = 0;
 
-                        let quad = get_quad(
+                        let quad = Quad::pack(
                             mesh_left + (if face == 4 { mesh_width } else { 0 }) as usize,
                             mesh_front,
                             mesh_up,
@@ -360,27 +363,6 @@ fn get_axis_index(axis: usize, a: usize, b: usize, c: usize) -> usize {
         1 => b + (c * CS_P) + (a * CS_P2),
         _ => c + (a * CS_P) + (b * CS_P2),
     }
-}
-
-#[inline]
-fn get_quad(x: usize, y: usize, z: usize, w: usize, h: usize, v_type: usize) -> u64 {
-    ((v_type << 32) | (h << 24) | (w << 18) | (z << 12) | (y << 6) | x) as u64
-}
-
-/// Unpacks quad data and formats it as "{x};{y};{z} {w}x{h} v={v_type}" for debugging
-pub fn debug_quad(mut quad: u64) -> String {
-    let x = quad & MASK_6;
-    quad >>= 6;
-    let y = quad & MASK_6;
-    quad >>= 6;
-    let z = quad & MASK_6;
-    quad >>= 6;
-    let w = quad & MASK_6;
-    quad >>= 6;
-    let h = quad & MASK_6;
-    quad >>= 8;
-    let v_type = quad;
-    format!("{x};{y};{z} {w}x{h} v={v_type}")
 }
 
 /// Compute Mesh indices for a given amount of quads
@@ -435,7 +417,7 @@ pub fn compute_transparent_mask(voxels: &[u16], transparents: &BTreeSet<u16>) ->
 
 #[cfg(test)]
 mod tests {
-    use crate::{self as bgm, CS_P2, debug_quad};
+    use crate::{self as bgm, CS_P2};
     use alloc::{boxed::Box, collections::btree_set::BTreeSet};
 
     /// Show quad output on a simple 2 voxels case
@@ -454,7 +436,7 @@ mod tests {
         for (i, quads) in mesher.quads.iter().enumerate() {
             std::println!("--- Face {i} ---");
             for &quad in quads {
-                std::println!("{:?}", debug_quad(quad));
+                std::println!("{:?}", quad);
             }
         }
     }
