@@ -18,6 +18,7 @@ pub const ATTRIBUTE_VOXEL_DATA: MeshVertexAttribute =
 
 const LAYER_W: usize = 3;
 const SIZE: usize = 10;
+const CS: usize = 62;
 
 fn main() {
     App::new()
@@ -112,12 +113,12 @@ fn setup(
 /// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead
 fn generate_meshes() -> [Mesh; 3] {
     let voxels = voxel_buffer();
-    let mut mesher = bgm::Mesher::new();
+    let mut mesher = bgm::Mesher::<CS>::new();
     let mut transparent_blocks = BTreeSet::new();
     transparent_blocks.insert(2);
     transparent_blocks.insert(3);
-    let opaque_mask = bgm::compute_opaque_mask(&voxels, &transparent_blocks);
-    let trans_mask = bgm::compute_transparent_mask(&voxels, &transparent_blocks);
+    let opaque_mask = bgm::compute_opaque_mask::<CS>(&voxels, &transparent_blocks);
+    let trans_mask = bgm::compute_transparent_mask::<CS>(&voxels, &transparent_blocks);
     mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
     let mut positions: [_; 3] = core::array::from_fn(|_| Vec::new());
     let mut normals: [_; 3] = core::array::from_fn(|_| Vec::new());
@@ -157,12 +158,12 @@ fn generate_meshes() -> [Mesh; 3] {
     })
 }
 
-fn voxel_buffer() -> [u16; bgm::CS_P3] {
-    let mut voxels = [0; bgm::CS_P3];
-    for x in 0..bgm::CS {
-        for y in 0..bgm::CS {
-            for z in 0..bgm::CS {
-                voxels[bgm::pad_linearize(x, y, z)] = transparent_sandwich(x, y, z);
+fn voxel_buffer() -> [u16; bgm::Mesher::<CS>::CS_P3] {
+    let mut voxels = [0; bgm::Mesher::<CS>::CS_P3];
+    for x in 0..CS {
+        for y in 0..CS {
+            for z in 0..CS {
+                voxels[bgm::pad_linearize::<CS>(x, y, z)] = transparent_sandwich(x, y, z);
             }
         }
     }
