@@ -18,7 +18,6 @@ pub const ATTRIBUTE_VOXEL_DATA: MeshVertexAttribute =
 
 const SIZE: usize = 16;
 const SIZE2: usize = SIZE.pow(2);
-const MASK6: u32 = 0b111_111;
 
 fn main() {
     App::new()
@@ -90,10 +89,8 @@ fn generate_mesh() -> Mesh {
         let n = face.n();
         for quad in quads {
             let vertices_packed = face.vertices_packed(*quad);
-            for vertex_packed in vertices_packed.iter() {
-                let x = *vertex_packed & MASK6;
-                let y = (*vertex_packed >> 6) & MASK6;
-                let z = (*vertex_packed >> 12) & MASK6;
+            for vertex in vertices_packed.iter() {
+                let [x, y, z] = vertex.xyz();
                 positions.push([x as f32, y as f32, z as f32]);
                 normals.push(n.clone());
             }
