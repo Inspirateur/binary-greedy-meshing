@@ -82,6 +82,17 @@ impl Face {
         }
     }
 
+    pub fn opposite(&self) -> Self {
+        match self {
+            Self::Up => Self::Down,
+            Self::Down => Self::Up,
+            Self::Right => Self::Left,
+            Self::Left => Self::Right,
+            Self::Front => Self::Back,
+            Self::Back => Self::Front,
+        }
+    }
+    
     /// Takes a quad as outputted by binary greedy meshing, and outputs 4 vertices encoded as:
     /// (v << 24) | (u << 18) | (z << 12) | (y << 6) | x
     pub fn vertices_packed(&self, quad: Quad) -> [Vertex; 4] {
