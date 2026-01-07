@@ -71,14 +71,14 @@ fn packed_xyz(x: u32, y: u32, z: u32) -> u32 {
 }
 
 impl Face {
-    pub fn n(&self) -> [f32; 3] {
+    pub fn n(&self) -> [i32; 3] {
         match self {
-            Self::Up => [0., 1., 0.],
-            Self::Down => [0., -1., 0.],
-            Self::Right => [1., 0., 0.],
-            Self::Left => [-1., 0., 0.],
-            Self::Front => [0., 0., 1.],
-            Self::Back => [0., 0., -1.],
+            Self::Up => [0, 1, 0],
+            Self::Down => [0, -1, 0],
+            Self::Right => [1, 0, 0],
+            Self::Left => [-1, 0, 0],
+            Self::Front => [0, 0, 1],
+            Self::Back => [0, 0, -1],
         }
     }
 
@@ -92,7 +92,7 @@ impl Face {
             Self::Back => Self::Front,
         }
     }
-    
+
     /// Takes a quad as outputted by binary greedy meshing, and outputs 4 vertices encoded as:
     /// (v << 24) | (u << 18) | (z << 12) | (y << 6) | x
     pub fn vertices_packed(&self, quad: Quad) -> [Vertex; 4] {

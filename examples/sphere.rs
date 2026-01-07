@@ -87,7 +87,7 @@ fn generate_mesh() -> Mesh {
     let mut normals = Vec::new();
     for (face_n, quads) in mesher.quads.iter().enumerate() {
         let face: bgm::Face = (face_n as u8).into();
-        let n = face.n();
+        let n = face.n().map(|v| v as f32);
         for quad in quads {
             let vertices_packed = face.vertices_packed(*quad);
             for vertex in vertices_packed.iter() {

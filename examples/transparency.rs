@@ -125,7 +125,7 @@ fn generate_meshes() -> [Mesh; 3] {
     let mut indices: [_; 3] = core::array::from_fn(|_| Vec::new());
     for (face_n, quads) in mesher.quads.iter().enumerate() {
         let face: bgm::Face = (face_n as u8).into();
-        let n = face.n();
+        let n = face.n().map(|v| v as f32);
         for &quad in quads {
             let voxel_i = quad.voxel_id() as usize - 1;
             let vertices_packed = face.vertices_packed(quad);
