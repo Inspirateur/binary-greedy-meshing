@@ -17,7 +17,7 @@ pub const ATTRIBUTE_VOXEL_DATA: MeshVertexAttribute =
 
 const SIZE: usize = 16;
 const SIZE2: usize = SIZE.pow(2);
-const CS: usize = 30;
+const CS: usize = 32;
 
 fn main() {
     App::new()

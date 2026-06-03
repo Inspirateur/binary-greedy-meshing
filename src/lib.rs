@@ -1,4 +1,5 @@
 #![no_std]
+#![cfg_attr(feature = "simd", feature(portable_simd))]
 
 #[macro_use]
 extern crate alloc;
@@ -15,7 +16,7 @@ pub use quad::*;
 
 pub type RichMesher = Mesher<u32, RichQuad, 62>;
 pub type MiniMesher = Mesher<u8, MiniQuad, 62>;
-pub type MicroMesher = Mesher<u8, MicroQuad, 30>;
+pub type MicroMesher = Mesher<u8, MicroQuad, 32>;
 
 #[derive(Debug)]
 pub struct Mesher<M: Material, Q: Quad<M>, const CS: usize> {
