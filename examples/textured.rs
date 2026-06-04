@@ -62,10 +62,9 @@ fn setup(
     ));
     let mesh = Mesh3d(meshes.add(generate_mesh()));
 
-    let texture = asset_server.load_with_settings("texture.png", |s| {
+    let texture = asset_server.load_with_settings("atlas.png", |s: &mut _| {
         *s = ImageLoaderSettings {
             sampler: ImageSampler::Descriptor(ImageSamplerDescriptor {
-                // rewriting mode to repeat image,
                 address_mode_u: ImageAddressMode::Repeat,
                 address_mode_v: ImageAddressMode::Repeat,
                 ..default()
@@ -90,13 +89,13 @@ fn setup(
     });
 }
 
-/// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead
 fn generate_mesh() -> Mesh {
     let voxels = voxel_buffer();
     let mut mesher = MiniMesher::new();
     let opaque_mask = MiniMesher::compute_opaque_mask(&voxels, |_| false);
     let trans_mask = vec![0; MiniMesher::CS_P2].into_boxed_slice();
     mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
+
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
@@ -104,15 +103,25 @@ fn generate_mesh() -> Mesh {
     for (face_n, quads) in mesher.quads.iter().enumerate() {
         let face: bgm::Face = (face_n as u8).into();
         let n = face.n().map(|v| v as f32);
+
         for quad in quads {
+            let material = quad.m();
             let vertices_packed = face.vertices_packed(*quad);
+
             for vertex in vertices_packed.iter() {
                 positions.push(vertex.xyz());
                 normals.push(n);
-                uvs.push(vertex.uv());
+                let mut v_tex = vertex.v() as f32 * 0.5;
+
+                if material == 2 {
+                    v_tex += 0.5;
+                }
+
+                uvs.push([vertex.u() as f32, v_tex]);
             }
         }
     }
+
     let indices = MiniMesher::indices(positions.len() / 4);
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -143,10 +152,11 @@ fn voxel_buffer() -> [u8; MiniMesher::CS_P3] {
     voxels
 }
 
-/// This returns an opaque sphere
 fn sphere(x: usize, y: usize, z: usize) -> u8 {
-    if (x as i32 - 31).pow(2) + (y as i32 - 31).pow(2) + (z as i32 - 31).pow(2) < SIZE2 as i32 {
-        1
+    let dist2 = (x as i32 - 31).pow(2) + (y as i32 - 31).pow(2) + (z as i32 - 31).pow(2);
+    if dist2 < SIZE2 as i32 {
+        let index = x * CS * CS + y * CS + z;
+        if index.is_multiple_of(2) { 2 } else { 1 }
     } else {
         0
     }

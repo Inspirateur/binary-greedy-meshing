@@ -48,12 +48,12 @@ The fastest way of rendering quads is using instancing (check [this video](https
 - [src/render/mesh_utils.rs](https://github.com/Inspirateur/riverbed/blob/main/src/render/mesh_utils.rs) for Face+Quad => vertices conversion
 - [src/render/mesh_chunks.rs](https://github.com/Inspirateur/riverbed/blob/main/src/render/mesh_chunks.rs) for the rest of the meshing code (+ LOD)
 
-## Benchmarks
-running `cargo bench` on AMD Ryzen 5 5500 3.60 GHz:
-- "fast_mesh" with opaque voxels only: **65 µs**
-- "mesh" with opaque voxels only: **300 µs**
-- "fast_mesh" with opaque & transparents voxels: **90 µs**
-- "mesh" with opaque & transparents voxels: **340 µs**
+## Benchmarks (with SIMD feature enabled)
+running `cargo bench` on Intel Core i7-12650H:
+- "fast_mesh" with opaque voxels only: **43 µs**
+- "mesh" with opaque voxels only: **182 µs**
+- "fast_mesh" with opaque & transparents voxels: **70 µs**
+- "mesh" with opaque & transparents voxels: **235 µs**
 
 This is in line with the 50-200μs performance range reported from the original C version of the library  (which doesn't yet support transparency).
 

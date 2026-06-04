@@ -10,6 +10,10 @@ mod quad;
 
 use alloc::{boxed::Box, vec::Vec};
 
+use core::simd::Simd;
+#[cfg(feature = "simd")]
+use core::simd::{u64x4, usizex4};
+
 pub use face::*;
 pub use material::*;
 pub use quad::*;
@@ -102,73 +106,211 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
     }
 
     fn fast_face_culling(&mut self, voxels: &[M], opaque_mask: &[u64], trans_mask: &[u64]) {
-        // Hidden face culling
-        for a in 1..(Self::CS_P - 1) {
-            let a_ = a * Self::CS_P;
-
-            for b in 1..(Self::CS_P - 1) {
-                // Column-wise opaque step
-                let ab = a_ + b;
-                let opaque_col = opaque_mask[ab] & Self::P_MASK;
-                let unpadded_opaque_col = opaque_col >> 1;
-                let ba_index = (b - 1) + (a - 1) * CS;
-                let ab_index = (a - 1) + (b - 1) * CS;
-                let up_faces = ba_index;
-                let down_faces = ba_index + Self::CS_2;
-                let right_faces = ab_index + 2 * Self::CS_2;
-                let left_faces = ab_index + 3 * Self::CS_2;
-                let front_faces = ba_index + 4 * Self::CS_2;
-                let back_faces = ba_index + 5 * Self::CS_2;
-                let not_front_col = !opaque_mask[ab + Self::CS_P] >> 1;
-                let not_back_col = !opaque_mask[ab - Self::CS_P] >> 1;
-                let not_right_col = !opaque_mask[ab + 1] >> 1;
-                let not_left_col = !opaque_mask[ab - 1] >> 1;
-                let not_col_up = !(opaque_mask[ab] >> 1);
-                let not_col_down = !(opaque_mask[ab] << 1);
-                self.face_masks[up_faces] = unpadded_opaque_col & not_front_col;
-                self.face_masks[down_faces] = unpadded_opaque_col & not_back_col;
-
-                self.face_masks[right_faces] = unpadded_opaque_col & not_right_col;
-                self.face_masks[left_faces] = unpadded_opaque_col & not_left_col;
-
-                self.face_masks[front_faces] = opaque_col & not_col_up;
-                self.face_masks[back_faces] = opaque_col & not_col_down;
-
-                // check if there's transparent blocks in this column
-                let mut bits_here = trans_mask[ab] & Self::P_MASK;
-                if bits_here == 0 {
-                    continue;
+        #[cfg(not(feature = "simd"))]
+        {
+            for a in 1..(Self::CS_P - 1) {
+                let a_ = a * Self::CS_P;
+                for b in 1..(Self::CS_P - 1) {
+                    self.fast_face_culling_scalar((a, a_), b, voxels, opaque_mask, trans_mask);
                 }
-                // Block-wise transparent step
-                // The transparent step is slower than the opaque step
-                // because we need to check if neighboring transparent blocks are differents (we don't care about that for opaque blocks)
-                let ab_ = ab * Self::CS_P;
-                while bits_here != 0 {
-                    let c = bits_here.trailing_zeros() as usize;
-                    let c_mask = 1 << c;
-                    let unpadded_c_mask = c_mask >> 1;
-                    bits_here &= !(c_mask);
-                    let abc = ab_ + c;
-                    let v1 = voxels[abc];
-                    self.face_masks[up_faces] |= not_front_col
-                        & unpadded_c_mask
-                        & ((v1 != voxels[abc + Self::CS_P2]) as u64) << (c - 1);
-                    self.face_masks[down_faces] |= not_back_col
-                        & unpadded_c_mask
-                        & ((v1 != voxels[abc - Self::CS_P2]) as u64) << (c - 1);
+            }
+        }
 
-                    self.face_masks[right_faces] |= not_right_col
-                        & unpadded_c_mask
-                        & ((v1 != voxels[abc + Self::CS_P]) as u64) << (c - 1);
-                    self.face_masks[left_faces] |= not_left_col
-                        & unpadded_c_mask
-                        & ((v1 != voxels[abc - Self::CS_P]) as u64) << (c - 1);
+        #[cfg(feature = "simd")]
+        {
+            let p_mask_v = u64x4::splat(Self::P_MASK);
+            for a in 1..(Self::CS_P - 1) {
+                let a_ = a * Self::CS_P;
+                let mut b = 1;
+                let b_end = Self::CS_P - 1; // exclusive, loop runs for b in 1..CS_P-1
 
-                    self.face_masks[front_faces] |=
-                        not_col_up & c_mask & ((v1 != voxels[abc + 1]) as u64) << c;
-                    self.face_masks[back_faces] |=
-                        not_col_down & c_mask & ((v1 != voxels[abc - 1]) as u64) << c;
+                while b < b_end {
+                    // Process 4 columns at once if possible
+                    if b + 4 <= b_end {
+                        self.fast_face_culling_simd(
+                            (a, a_),
+                            b,
+                            voxels,
+                            opaque_mask,
+                            trans_mask,
+                            p_mask_v,
+                        );
+                        b += 4;
+                    } else {
+                        // Fallback to scalar for a single column (identical to original loop body)
+                        self.fast_face_culling_scalar((a, a_), b, voxels, opaque_mask, trans_mask);
+                        b += 1;
+                    }
                 }
+            }
+        }
+    }
+
+    fn fast_face_culling_scalar(
+        &mut self,
+        (a, a_): (usize, usize),
+        b: usize,
+        voxels: &[M],
+        opaque_mask: &[u64],
+        trans_mask: &[u64],
+    ) {
+        let ab = a_ + b;
+        let opaque_col = opaque_mask[ab] & Self::P_MASK;
+        let unpadded_opaque_col = opaque_col >> 1;
+        let ba_index = (b - 1) + (a - 1) * CS;
+        let ab_index = (a - 1) + (b - 1) * CS;
+        let up_faces = ba_index;
+        let down_faces = ba_index + Self::CS_2;
+        let right_faces = ab_index + 2 * Self::CS_2;
+        let left_faces = ab_index + 3 * Self::CS_2;
+        let front_faces = ba_index + 4 * Self::CS_2;
+        let back_faces = ba_index + 5 * Self::CS_2;
+        let not_front_col = !opaque_mask[ab + Self::CS_P] >> 1;
+        let not_back_col = !opaque_mask[ab - Self::CS_P] >> 1;
+        let not_right_col = !opaque_mask[ab + 1] >> 1;
+        let not_left_col = !opaque_mask[ab - 1] >> 1;
+        let not_col_up = !(opaque_mask[ab] >> 1);
+        let not_col_down = !(opaque_mask[ab] << 1);
+        self.face_masks[up_faces] = unpadded_opaque_col & not_front_col;
+        self.face_masks[down_faces] = unpadded_opaque_col & not_back_col;
+
+        self.face_masks[right_faces] = unpadded_opaque_col & not_right_col;
+        self.face_masks[left_faces] = unpadded_opaque_col & not_left_col;
+
+        self.face_masks[front_faces] = opaque_col & not_col_up;
+        self.face_masks[back_faces] = opaque_col & not_col_down;
+
+        // check if there's transparent blocks in this column
+        let mut bits_here = trans_mask[ab] & Self::P_MASK;
+        if bits_here == 0 {
+            return;
+        }
+
+        // Block-wise transparent step
+        let ab_ = ab * Self::CS_P;
+        while bits_here != 0 {
+            let c = bits_here.trailing_zeros() as usize;
+            let c_mask = 1 << c;
+            let unpadded_c_mask = c_mask >> 1;
+            bits_here &= !(c_mask);
+            let abc = ab_ + c;
+            let v1 = voxels[abc];
+            self.face_masks[up_faces] |= not_front_col
+                & unpadded_c_mask
+                & ((v1 != voxels[abc + Self::CS_P2]) as u64) << (c - 1);
+            self.face_masks[down_faces] |= not_back_col
+                & unpadded_c_mask
+                & ((v1 != voxels[abc - Self::CS_P2]) as u64) << (c - 1);
+
+            self.face_masks[right_faces] |= not_right_col
+                & unpadded_c_mask
+                & ((v1 != voxels[abc + Self::CS_P]) as u64) << (c - 1);
+            self.face_masks[left_faces] |= not_left_col
+                & unpadded_c_mask
+                & ((v1 != voxels[abc - Self::CS_P]) as u64) << (c - 1);
+
+            self.face_masks[front_faces] |=
+                not_col_up & c_mask & ((v1 != voxels[abc + 1]) as u64) << c;
+            self.face_masks[back_faces] |=
+                not_col_down & c_mask & ((v1 != voxels[abc - 1]) as u64) << c;
+        }
+    }
+
+    #[cfg(feature = "simd")]
+    fn fast_face_culling_simd(
+        &mut self,
+        (a, a_): (usize, usize),
+        b: usize,
+        voxels: &[M],
+        opaque_mask: &[u64],
+        trans_mask: &[u64],
+        p_mask_v: Simd<u64, 4>,
+    ) {
+        let raw_opaque = u64x4::from_slice(&opaque_mask[a_ + b..][..4]);
+        let opaque = raw_opaque & p_mask_v;
+        let unpadded = opaque >> 1;
+
+        let not_front = !u64x4::from_slice(&opaque_mask[a_ + b + Self::CS_P..][..4]) >> 1;
+        let not_back = !u64x4::from_slice(&opaque_mask[a_ + b - Self::CS_P..][..4]) >> 1;
+        let not_right = !u64x4::from_slice(&opaque_mask[a_ + b + 1..][..4]) >> 1;
+        let not_left = !u64x4::from_slice(&opaque_mask[a_ + b - 1..][..4]) >> 1;
+        let not_up = !(opaque >> 1);
+        let not_down = !(opaque << 1);
+
+        let up_vals = unpadded & not_front;
+        let down_vals = unpadded & not_back;
+        let right_vals = unpadded & not_right;
+        let left_vals = unpadded & not_left;
+        let front_vals = opaque & not_up;
+        let back_vals = opaque & not_down;
+
+        let up_start = (a - 1) * CS + (b - 1);
+        self.face_masks[up_start..up_start + 4].copy_from_slice(&up_vals.to_array());
+        self.face_masks[up_start + Self::CS_2..up_start + Self::CS_2 + 4]
+            .copy_from_slice(&down_vals.to_array());
+        self.face_masks[up_start + 4 * Self::CS_2..up_start + 4 * Self::CS_2 + 4]
+            .copy_from_slice(&front_vals.to_array());
+        self.face_masks[up_start + 5 * Self::CS_2..up_start + 5 * Self::CS_2 + 4]
+            .copy_from_slice(&back_vals.to_array());
+
+        let ab_indices: [usize; 4] = core::array::from_fn(|i| (a - 1) + (b + i - 1) * CS);
+        let base_idx = usizex4::from_array(ab_indices);
+        let right_idxs = base_idx + usizex4::splat(2 * Self::CS_2);
+        let left_idxs = base_idx + usizex4::splat(3 * Self::CS_2);
+        right_vals.scatter(&mut self.face_masks, right_idxs);
+        left_vals.scatter(&mut self.face_masks, left_idxs);
+
+        for col in 0..4 {
+            let b_cur = b + col;
+            let ab = a_ + b_cur;
+            let mut bits_here = trans_mask[ab] & Self::P_MASK;
+            if bits_here == 0 {
+                continue;
+            }
+
+            let not_front_col = !opaque_mask[ab + Self::CS_P] >> 1;
+            let not_back_col = !opaque_mask[ab - Self::CS_P] >> 1;
+            let not_right_col = !opaque_mask[ab + 1] >> 1;
+            let not_left_col = !opaque_mask[ab - 1] >> 1;
+            let not_col_up = !(opaque_mask[ab] >> 1);
+            let not_col_down = !(opaque_mask[ab] << 1);
+
+            let ab_ = ab * Self::CS_P;
+            let ba_index = (b_cur - 1) + (a - 1) * CS;
+            let ab_index = (a - 1) + (b_cur - 1) * CS;
+            let up_faces = ba_index;
+            let down_faces = ba_index + Self::CS_2;
+            let right_faces = ab_index + 2 * Self::CS_2;
+            let left_faces = ab_index + 3 * Self::CS_2;
+            let front_faces = ba_index + 4 * Self::CS_2;
+            let back_faces = ba_index + 5 * Self::CS_2;
+
+            while bits_here != 0 {
+                let c = bits_here.trailing_zeros() as usize;
+                let c_mask = 1 << c;
+                let unpadded_c_mask = c_mask >> 1;
+                bits_here &= !c_mask;
+                let abc = ab_ + c;
+                let v1 = voxels[abc];
+
+                self.face_masks[up_faces] |= not_front_col
+                    & unpadded_c_mask
+                    & ((v1 != voxels[abc + Self::CS_P2]) as u64) << (c - 1);
+                self.face_masks[down_faces] |= not_back_col
+                    & unpadded_c_mask
+                    & ((v1 != voxels[abc - Self::CS_P2]) as u64) << (c - 1);
+
+                self.face_masks[right_faces] |= not_right_col
+                    & unpadded_c_mask
+                    & ((v1 != voxels[abc + Self::CS_P]) as u64) << (c - 1);
+                self.face_masks[left_faces] |= not_left_col
+                    & unpadded_c_mask
+                    & ((v1 != voxels[abc - Self::CS_P]) as u64) << (c - 1);
+
+                self.face_masks[front_faces] |=
+                    not_col_up & c_mask & ((v1 != voxels[abc + 1]) as u64) << c;
+                self.face_masks[back_faces] |=
+                    not_col_down & c_mask & ((v1 != voxels[abc - 1]) as u64) << c;
             }
         }
     }

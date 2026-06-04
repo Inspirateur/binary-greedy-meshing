@@ -8,6 +8,8 @@ repository = "https://github.com/Inspirateur/binary-greedy-meshing"
 keywords = ["meshing", "greedy", "binary", "voxel", "chunk"]
 
 [features]
+default = ["simd"]
+simd = []
 __dev_bevy = ["dep:bevy"]
 __dev_criterion = ["dep:criterion"]
 
