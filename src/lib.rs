@@ -90,7 +90,8 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
         for y in 0..CS {
             for x in 0..CS {
                 for z in 0..CS {
-                    padded[Self::pad_linearize(x, y, z)] = center[z + x * CS + y * CS * CS];
+                    padded[Self::pad_linearize(x + 1, y + 1, z + 1)] =
+                        center[z + x * CS + y * CS * CS];
                 }
             }
         }
@@ -99,7 +100,7 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
         if let Some(neg_x_data) = neighbors[0] {
             for y in 0..CS {
                 for z in 0..CS {
-                    padded[Self::pad_linearize(0, y, z)] =
+                    padded[Self::pad_linearize(0, y + 1, z + 1)] =
                         neg_x_data[z + (CS - 1) * CS + y * CS * CS];
                 }
             }
@@ -108,7 +109,7 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
         if let Some(pos_x_data) = neighbors[1] {
             for y in 0..CS {
                 for z in 0..CS {
-                    padded[Self::pad_linearize(CS + 1, y, z)] = pos_x_data[z + y * CS * CS];
+                    padded[Self::pad_linearize(CS + 1, y + 1, z + 1)] = pos_x_data[z + y * CS * CS];
                 }
             }
         }
@@ -116,7 +117,7 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
         if let Some(neg_y_data) = neighbors[2] {
             for x in 0..CS {
                 for z in 0..CS {
-                    padded[Self::pad_linearize(x, 0, z)] =
+                    padded[Self::pad_linearize(x + 1, 0, z + 1)] =
                         neg_y_data[z + x * CS + (CS - 1) * CS * CS];
                 }
             }
@@ -125,7 +126,7 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
         if let Some(pos_y_data) = neighbors[3] {
             for x in 0..CS {
                 for z in 0..CS {
-                    padded[Self::pad_linearize(x, CS + 1, z)] = pos_y_data[z + x * CS];
+                    padded[Self::pad_linearize(x + 1, CS + 1, z + 1)] = pos_y_data[z + x * CS];
                 }
             }
         }
@@ -133,7 +134,7 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
         if let Some(neg_z_data) = neighbors[4] {
             for y in 0..CS {
                 for x in 0..CS {
-                    padded[Self::pad_linearize(x, y, 0)] =
+                    padded[Self::pad_linearize(x + 1, y + 1, 0)] =
                         neg_z_data[(CS - 1) + x * CS + y * CS * CS];
                 }
             }
@@ -142,14 +143,14 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
         if let Some(pos_z_data) = neighbors[5] {
             for y in 0..CS {
                 for x in 0..CS {
-                    padded[Self::pad_linearize(x, y, CS + 1)] = pos_z_data[x * CS + y * CS * CS];
+                    padded[Self::pad_linearize(x + 1, y + 1, CS + 1)] =
+                        pos_z_data[x * CS + y * CS * CS];
                 }
             }
         }
 
         padded
     }
-
     fn face_culling(&mut self, voxels: &[M], is_transparent: impl Fn(M) -> bool) {
         // Hidden face culling
         for a in 1..(Self::CS_P - 1) {
@@ -644,7 +645,7 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
     }
 
     pub fn pad_linearize(x: usize, y: usize, z: usize) -> usize {
-        z + 1 + (x + 1) * Self::CS_P + (y + 1) * Self::CS_P2
+        z + x * Self::CS_P + y * Self::CS_P2
     }
 
     /// Compute an opacity mask from a voxel buffer and a BTreeSet specifying which voxel values are transparent
