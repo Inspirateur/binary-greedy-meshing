@@ -87,8 +87,7 @@ impl Face {
         }
     }
 
-    /// Takes a quad as outputted by binary greedy meshing, and outputs 4 vertices encoded as:
-    /// (v << 24) | (u << 18) | (z << 12) | (y << 6) | x
+    /// Takes a quad as outputted by binary greedy meshing, and outputs 4 vertices
     pub fn vertices_packed<M: Material>(&self, quad: impl Quad<M>) -> [Vertex; 4] {
         let x = quad.x();
         let y = quad.y();

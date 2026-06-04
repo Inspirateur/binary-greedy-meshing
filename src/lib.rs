@@ -18,9 +18,19 @@ pub use face::*;
 pub use material::*;
 pub use quad::*;
 
-pub type RichMesher = Mesher<u32, RichQuad, 62>;
-pub type MiniMesher = Mesher<u8, MiniQuad, 62>;
-pub type MicroMesher = Mesher<u8, MicroQuad, 32>;
+// The `CS` (chunk size) constants for each mesher type are bounded by the bit-width
+// of the coordinate fields in the corresponding quad structs.
+//
+// For default types we use Max CS:
+// Max CS = 2^(Quad coordinate bitness (for example 5)) - 1
+//
+// But you can use only usable section of chunk:
+// Usable CS = Max CS - 1
+//
+// So for example, final chunk size where you can place any blocks is 2^5 - 1 - 1 = 30
+pub type RichMesher = Mesher<u32, RichQuad, 63>;
+pub type MiniMesher = Mesher<u8, MiniQuad, 63>;
+pub type MicroMesher = Mesher<u8, MicroQuad, 31>;
 
 #[derive(Debug)]
 pub struct Mesher<M: Material, Q: Quad<M>, const CS: usize> {
@@ -68,6 +78,76 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
         for i in 0..self.quads.len() {
             self.quads[i].clear();
         }
+    }
+
+    pub fn assemble_padded(center: &[M], neighbors: [Option<&[M]>; 6]) -> Box<[M]>
+    where
+        M: Default,
+    {
+        let mut padded = vec![M::default(); Self::CS_P3].into_boxed_slice();
+
+        // Center
+        for y in 0..CS {
+            for x in 0..CS {
+                for z in 0..CS {
+                    padded[Self::pad_linearize(x, y, z)] = center[z + x * CS + y * CS * CS];
+                }
+            }
+        }
+
+        // neg_x (left)
+        if let Some(neg_x_data) = neighbors[0] {
+            for y in 0..CS {
+                for z in 0..CS {
+                    padded[Self::pad_linearize(0, y, z)] =
+                        neg_x_data[z + (CS - 1) * CS + y * CS * CS];
+                }
+            }
+        }
+        // pos_x (right)
+        if let Some(pos_x_data) = neighbors[1] {
+            for y in 0..CS {
+                for z in 0..CS {
+                    padded[Self::pad_linearize(CS + 1, y, z)] = pos_x_data[z + y * CS * CS];
+                }
+            }
+        }
+        // neg_y (bottom)
+        if let Some(neg_y_data) = neighbors[2] {
+            for x in 0..CS {
+                for z in 0..CS {
+                    padded[Self::pad_linearize(x, 0, z)] =
+                        neg_y_data[z + x * CS + (CS - 1) * CS * CS];
+                }
+            }
+        }
+        // pos_y (top)
+        if let Some(pos_y_data) = neighbors[3] {
+            for x in 0..CS {
+                for z in 0..CS {
+                    padded[Self::pad_linearize(x, CS + 1, z)] = pos_y_data[z + x * CS];
+                }
+            }
+        }
+        // neg_z (back)
+        if let Some(neg_z_data) = neighbors[4] {
+            for y in 0..CS {
+                for x in 0..CS {
+                    padded[Self::pad_linearize(x, y, 0)] =
+                        neg_z_data[(CS - 1) + x * CS + y * CS * CS];
+                }
+            }
+        }
+        // pos_z (front)
+        if let Some(pos_z_data) = neighbors[5] {
+            for y in 0..CS {
+                for x in 0..CS {
+                    padded[Self::pad_linearize(x, y, CS + 1)] = pos_z_data[x * CS + y * CS * CS];
+                }
+            }
+        }
+
+        padded
     }
 
     fn face_culling(&mut self, voxels: &[M], is_transparent: impl Fn(M) -> bool) {
@@ -502,6 +582,32 @@ impl<M: Material, Q: Quad<M>, const CS: usize> Mesher<M, Q, CS> {
     pub fn mesh(&mut self, voxels: &[M], is_transparent: impl Fn(M) -> bool) {
         self.face_culling(voxels, is_transparent);
         self.face_merging(voxels);
+    }
+
+    pub fn fast_mesh_from_chunks(
+        &mut self,
+        center: &[M],
+        neighbors: [Option<&[M]>; 6],
+        is_transparent: impl Fn(M) -> bool,
+    ) where
+        M: Default,
+    {
+        let padded = Self::assemble_padded(center, neighbors);
+        let opaque_mask = Self::compute_opaque_mask(&padded, &is_transparent);
+        let trans_mask = Self::compute_transparent_mask(&padded, &is_transparent);
+        self.fast_mesh(&padded, &opaque_mask, &trans_mask);
+    }
+
+    pub fn mesh_from_chunks(
+        &mut self,
+        center: &[M],
+        neighbors: [Option<&[M]>; 6],
+        is_transparent: impl Fn(M) -> bool,
+    ) where
+        M: Default,
+    {
+        let padded = Self::assemble_padded(center, neighbors);
+        self.mesh(&padded, is_transparent);
     }
 
     #[inline]
