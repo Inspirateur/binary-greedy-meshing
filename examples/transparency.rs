@@ -1,17 +1,16 @@
-use std::collections::BTreeSet;
-
 use bevy::{
+    asset::RenderAssetUsages,
+    camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
+    mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues},
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
     render::{
         RenderPlugin,
-        mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues},
-        render_asset::RenderAssetUsages,
         render_resource::VertexFormat,
         settings::{RenderCreation, WgpuFeatures, WgpuSettings},
     },
 };
-use binary_greedy_meshing as bgm;
+use binary_greedy_meshing::{self as bgm, MiniMesher};
 
 pub const ATTRIBUTE_VOXEL_DATA: MeshVertexAttribute =
     MeshVertexAttribute::new("VoxelData", 48757581, VertexFormat::Uint32x2);
@@ -32,6 +31,7 @@ fn main() {
                 ..default()
             }),
             WireframePlugin::default(),
+            FreeCameraPlugin,
         ))
         .add_systems(Startup, setup)
         .run();
@@ -39,7 +39,7 @@ fn main() {
 
 /// 0 = Air, 1 = Solid, 2 = transparent, 3 = other transparent
 /// This returns a "sandwich" with 1 solid layer and 2 transparent layers
-fn transparent_sandwich(x: usize, y: usize, z: usize) -> u16 {
+fn transparent_sandwich(x: usize, y: usize, z: usize) -> u8 {
     if y > SIZE || z > SIZE {
         return 0;
     }
@@ -71,6 +71,7 @@ fn setup(
     ));
     commands.spawn((
         Camera3d::default(),
+        FreeCamera::default(),
         Transform::from_translation(Vec3::new(40.0, 20.0, 50.0))
             .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
     ));
@@ -103,7 +104,7 @@ fn setup(
         })),
     ));
 
-    commands.insert_resource(AmbientLight {
+    commands.spawn(AmbientLight {
         color: Color::WHITE,
         brightness: light_consts::lux::OVERCAST_DAY,
         ..Default::default()
@@ -113,12 +114,9 @@ fn setup(
 /// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead
 fn generate_meshes() -> [Mesh; 3] {
     let voxels = voxel_buffer();
-    let mut mesher = bgm::Mesher::<CS>::new();
-    let mut transparent_blocks = BTreeSet::new();
-    transparent_blocks.insert(2);
-    transparent_blocks.insert(3);
-    let opaque_mask = bgm::compute_opaque_mask::<CS>(&voxels, &transparent_blocks);
-    let trans_mask = bgm::compute_transparent_mask::<CS>(&voxels, &transparent_blocks);
+    let mut mesher = MiniMesher::new();
+    let opaque_mask = MiniMesher::compute_opaque_mask(&voxels, |v| v == 2 || v == 3);
+    let trans_mask = MiniMesher::compute_transparent_mask(&voxels, |v| v == 2 || v == 3);
     mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
     let mut positions: [_; 3] = core::array::from_fn(|_| Vec::new());
     let mut normals: [_; 3] = core::array::from_fn(|_| Vec::new());
@@ -127,17 +125,16 @@ fn generate_meshes() -> [Mesh; 3] {
         let face: bgm::Face = (face_n as u8).into();
         let n = face.n().map(|v| v as f32);
         for &quad in quads {
-            let voxel_i = quad.voxel_id() as usize - 1;
+            let voxel_i = quad.m() as usize - 1;
             let vertices_packed = face.vertices_packed(quad);
             for &vertex in vertices_packed.iter() {
-                let [x, y, z] = vertex.xyz();
-                positions[voxel_i].push([x as f32, y as f32, z as f32]);
-                normals[voxel_i].push(n.clone());
+                positions[voxel_i].push(vertex.xyz());
+                normals[voxel_i].push(n);
             }
         }
     }
     for i in 0..positions.len() {
-        indices[i] = bgm::indices(positions[i].len() / 4);
+        indices[i] = MiniMesher::indices(positions[i].len() / 4);
     }
     core::array::from_fn(|i| {
         let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
@@ -158,12 +155,12 @@ fn generate_meshes() -> [Mesh; 3] {
     })
 }
 
-fn voxel_buffer() -> [u16; bgm::Mesher::<CS>::CS_P3] {
-    let mut voxels = [0; bgm::Mesher::<CS>::CS_P3];
+fn voxel_buffer() -> [u8; MiniMesher::CS_P3] {
+    let mut voxels = [0; MiniMesher::CS_P3];
     for x in 0..CS {
         for y in 0..CS {
             for z in 0..CS {
-                voxels[bgm::pad_linearize::<CS>(x, y, z)] = transparent_sandwich(x, y, z);
+                voxels[MiniMesher::pad_linearize(x, y, z)] = transparent_sandwich(x, y, z);
             }
         }
     }

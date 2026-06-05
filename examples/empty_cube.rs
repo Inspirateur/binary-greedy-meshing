@@ -10,14 +10,12 @@ use bevy::{
         settings::{RenderCreation, WgpuFeatures, WgpuSettings},
     },
 };
-use binary_greedy_meshing::{self as bgm, MiniMesher};
+use binary_greedy_meshing::{self as bgm, MicroMesher};
 
 pub const ATTRIBUTE_VOXEL_DATA: MeshVertexAttribute =
     MeshVertexAttribute::new("VoxelData", 48757581, VertexFormat::Uint32x2);
 
-const SIZE: usize = 16;
-const SIZE2: usize = SIZE.pow(2);
-const CS: usize = 62;
+const CS: usize = 31;
 
 fn main() {
     App::new()
@@ -49,7 +47,6 @@ fn setup(
         Transform::from_translation(Vec3::new(50.0, 100.0, 50.0)),
         PointLight {
             range: 200.0,
-            //intensity: 8000.0,
             ..Default::default()
         },
     ));
@@ -79,10 +76,8 @@ fn setup(
 /// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead
 fn generate_mesh() -> Mesh {
     let voxels = voxel_buffer();
-    let mut mesher = MiniMesher::new();
-    let opaque_mask = MiniMesher::compute_opaque_mask(&voxels, |_| false);
-    let trans_mask = vec![0; MiniMesher::CS_P2].into_boxed_slice();
-    mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
+    let mut mesher = MicroMesher::new();
+    mesher.fast_mesh_from_chunks(&voxels, Default::default(), |_| false);
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     for (face_n, quads) in mesher.quads.iter().enumerate() {
@@ -96,7 +91,7 @@ fn generate_mesh() -> Mesh {
             }
         }
     }
-    let indices = MiniMesher::indices(positions.len() / 4);
+    let indices = MicroMesher::indices(positions.len() / 4);
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
@@ -117,21 +112,26 @@ fn generate_mesh() -> Mesh {
     mesh
 }
 
-fn voxel_buffer() -> [u8; MiniMesher::CS_P3] {
-    let mut voxels = [0; MiniMesher::CS_P3];
+fn voxel_buffer() -> [u8; 29791] {
+    let mut voxels = [0; CS * CS * CS];
     for x in 0..CS {
         for y in 0..CS {
             for z in 0..CS {
-                voxels[MiniMesher::pad_linearize(x, y, z)] = sphere(x, y, z);
+                voxels[z + x * CS + y * CS * CS] = empty_cube(x, y, z);
             }
         }
     }
     voxels
 }
 
-/// This returns an opaque sphere
-fn sphere(x: usize, y: usize, z: usize) -> u8 {
-    if (x as i32 - 31).pow(2) + (y as i32 - 31).pow(2) + (z as i32 - 31).pow(2) < SIZE2 as i32 {
+fn empty_cube(x: usize, y: usize, z: usize) -> u8 {
+    const MIN: usize = 0;
+    const MAX: usize = CS - 1;
+
+    if ((x == MIN || x == MAX) && (MIN..=MAX).contains(&y) && (MIN..=MAX).contains(&z))
+        || ((y == MIN || y == MAX) && (MIN..=MAX).contains(&x) && (MIN..=MAX).contains(&z))
+        || ((z == MIN || z == MAX) && (MIN..=MAX).contains(&x) && (MIN..=MAX).contains(&y))
+    {
         1
     } else {
         0

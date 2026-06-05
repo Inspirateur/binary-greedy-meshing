@@ -1,6 +1,7 @@
 use bevy::{
     asset::RenderAssetUsages,
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
+    image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
     mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues},
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
@@ -42,14 +43,14 @@ fn setup(
     mut wireframe_config: ResMut<WireframeConfig>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    asset_server: Res<AssetServer>,
 ) {
     wireframe_config.global = true;
 
     commands.spawn((
         Transform::from_translation(Vec3::new(50.0, 100.0, 50.0)),
-        PointLight {
-            range: 200.0,
-            //intensity: 8000.0,
+        DirectionalLight {
+            illuminance: light_consts::lux::HALLWAY,
             ..Default::default()
         },
     ));
@@ -61,10 +62,22 @@ fn setup(
     ));
     let mesh = Mesh3d(meshes.add(generate_mesh()));
 
+    let texture = asset_server.load_with_settings("atlas.png", |s: &mut _| {
+        *s = ImageLoaderSettings {
+            sampler: ImageSampler::Descriptor(ImageSamplerDescriptor {
+                address_mode_u: ImageAddressMode::Repeat,
+                address_mode_v: ImageAddressMode::Repeat,
+                ..default()
+            }),
+            ..default()
+        }
+    });
+
     commands.spawn((
         mesh,
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0.1, 0.1, 0.1, 1.0),
+            base_color: Color::WHITE,
+            base_color_texture: Some(texture),
             ..Default::default()
         })),
     ));
@@ -76,34 +89,43 @@ fn setup(
     });
 }
 
-/// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead
 fn generate_mesh() -> Mesh {
     let voxels = voxel_buffer();
     let mut mesher = MiniMesher::new();
     let opaque_mask = MiniMesher::compute_opaque_mask(&voxels, |_| false);
     let trans_mask = vec![0; MiniMesher::CS_P2].into_boxed_slice();
     mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
+
     let mut positions = Vec::new();
     let mut normals = Vec::new();
+    let mut uvs = Vec::new();
+
     for (face_n, quads) in mesher.quads.iter().enumerate() {
         let face: bgm::Face = (face_n as u8).into();
         let n = face.n().map(|v| v as f32);
+
         for quad in quads {
+            let material = quad.m();
             let vertices_packed = face.vertices_packed(*quad);
+
             for vertex in vertices_packed.iter() {
                 positions.push(vertex.xyz());
                 normals.push(n);
+                let mut v_tex = vertex.v() as f32 * 0.5;
+
+                if material == 2 {
+                    v_tex += 0.5;
+                }
+
+                uvs.push([vertex.u() as f32, v_tex]);
             }
         }
     }
+
     let indices = MiniMesher::indices(positions.len() / 4);
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
-    );
-    mesh.insert_attribute(
-        Mesh::ATTRIBUTE_UV_0,
-        VertexAttributeValues::Float32x2(vec![[0.0; 2]; positions.len()]),
     );
     mesh.insert_attribute(
         Mesh::ATTRIBUTE_POSITION,
@@ -113,6 +135,7 @@ fn generate_mesh() -> Mesh {
         Mesh::ATTRIBUTE_NORMAL,
         VertexAttributeValues::Float32x3(normals),
     );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, VertexAttributeValues::Float32x2(uvs));
     mesh.insert_indices(Indices::U32(indices));
     mesh
 }
@@ -129,10 +152,11 @@ fn voxel_buffer() -> [u8; MiniMesher::CS_P3] {
     voxels
 }
 
-/// This returns an opaque sphere
 fn sphere(x: usize, y: usize, z: usize) -> u8 {
-    if (x as i32 - 31).pow(2) + (y as i32 - 31).pow(2) + (z as i32 - 31).pow(2) < SIZE2 as i32 {
-        1
+    let dist2 = (x as i32 - 31).pow(2) + (y as i32 - 31).pow(2) + (z as i32 - 31).pow(2);
+    if dist2 < SIZE2 as i32 {
+        let index = x * CS * CS + y * CS + z;
+        if index.is_multiple_of(2) { 2 } else { 1 }
     } else {
         0
     }

@@ -10,14 +10,14 @@ use bevy::{
         settings::{RenderCreation, WgpuFeatures, WgpuSettings},
     },
 };
-use binary_greedy_meshing::{self as bgm, MiniMesher};
+use binary_greedy_meshing::{self as bgm, MicroMesher};
 
 pub const ATTRIBUTE_VOXEL_DATA: MeshVertexAttribute =
     MeshVertexAttribute::new("VoxelData", 48757581, VertexFormat::Uint32x2);
 
 const SIZE: usize = 16;
 const SIZE2: usize = SIZE.pow(2);
-const CS: usize = 62;
+const CS: usize = 32;
 
 fn main() {
     App::new()
@@ -79,9 +79,9 @@ fn setup(
 /// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead
 fn generate_mesh() -> Mesh {
     let voxels = voxel_buffer();
-    let mut mesher = MiniMesher::new();
-    let opaque_mask = MiniMesher::compute_opaque_mask(&voxels, |_| false);
-    let trans_mask = vec![0; MiniMesher::CS_P2].into_boxed_slice();
+    let mut mesher = MicroMesher::new();
+    let opaque_mask = MicroMesher::compute_opaque_mask(&voxels, |_| false);
+    let trans_mask = vec![0; MicroMesher::CS_P2].into_boxed_slice();
     mesher.fast_mesh(&voxels, &opaque_mask, &trans_mask);
     let mut positions = Vec::new();
     let mut normals = Vec::new();
@@ -96,7 +96,7 @@ fn generate_mesh() -> Mesh {
             }
         }
     }
-    let indices = MiniMesher::indices(positions.len() / 4);
+    let indices = MicroMesher::indices(positions.len() / 4);
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
@@ -117,12 +117,12 @@ fn generate_mesh() -> Mesh {
     mesh
 }
 
-fn voxel_buffer() -> [u8; MiniMesher::CS_P3] {
-    let mut voxels = [0; MiniMesher::CS_P3];
+fn voxel_buffer() -> [u8; MicroMesher::CS_P3] {
+    let mut voxels = [0; MicroMesher::CS_P3];
     for x in 0..CS {
         for y in 0..CS {
             for z in 0..CS {
-                voxels[MiniMesher::pad_linearize(x, y, z)] = sphere(x, y, z);
+                voxels[MicroMesher::pad_linearize(x, y, z)] = sphere(x, y, z);
             }
         }
     }
@@ -131,7 +131,7 @@ fn voxel_buffer() -> [u8; MiniMesher::CS_P3] {
 
 /// This returns an opaque sphere
 fn sphere(x: usize, y: usize, z: usize) -> u8 {
-    if (x as i32 - 31).pow(2) + (y as i32 - 31).pow(2) + (z as i32 - 31).pow(2) < SIZE2 as i32 {
+    if (x as i32 - 15).pow(2) + (y as i32 - 15).pow(2) + (z as i32 - 15).pow(2) < SIZE2 as i32 {
         1
     } else {
         0

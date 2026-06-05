@@ -1,18 +1,41 @@
 [package]
 name = "binary-greedy-meshing"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2024"
 description = "A port of https://github.com/cgerikj/binary-greedy-meshing to Rust."
 license = "MIT"
 repository = "https://github.com/Inspirateur/binary-greedy-meshing"
 keywords = ["meshing", "greedy", "binary", "voxel", "chunk"]
 
-[dependencies]
+[features]
+default = ["simd"]
+simd = []
+__dev_bevy = ["dep:bevy"]
+__dev_criterion = ["dep:criterion"]
 
-[dev-dependencies]
-bevy = "0.16.1"
-criterion = "0.6"
+[dependencies]
+bitfields = "1.0"
+bevy = { version = "0.18", optional = true, features = ["free_camera"] }
+criterion = { version = "0.8", optional = true }
+num-traits = { version = "0.2", default-features = false }
 
 [[bench]]
 name = "mesh"
 harness = false
+required-features = ["__dev_criterion"]
+
+[[example]]
+name = "sphere"
+required-features = ["__dev_bevy"]
+
+[[example]]
+name = "sphere32"
+required-features = ["__dev_bevy"]
+
+[[example]]
+name = "textured"
+required-features = ["__dev_bevy"]
+
+[[example]]
+name = "transparency"
+required-features = ["__dev_bevy"]
