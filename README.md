@@ -57,6 +57,6 @@ This is in line with the 50-200μs performance range reported from the original 
 
 The meshing is also ~30x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~3ms** to greedy mesh a chunk on my machine.
 
-Experimental LOD support is available via `mesh_lod` but it is very slow right now (**2.5 ms** on my machine).
+Experimental LOD support is available via `mesh_lod` but it is a bit right now (~**1 ms** on my machine).
 
 *chunk sizes are 62^3 (64^3 with padding), this crate doesn't support other sizes.*

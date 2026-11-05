@@ -395,7 +395,10 @@ impl<const CS: usize> Mesher<CS> {
         if max_v == 0 {
             return;
         }
-        let lod_view_volume = Self::CS_P.div_ceil(lod).pow(3);
+        // the lod view is unpadded, padding is only used to check air exposure and is not modified
+        let lod_cs = CS.div_ceil(lod);
+        let lod_view_volume = lod_cs.pow(3);
+        let lod_linearize = |x: usize, y: usize, z: usize| z + x * lod_cs + y * lod_cs * lod_cs;
         let mut counters = (0..max_v + 1)
             .map(|_| vec![0; lod_view_volume].into_boxed_slice())
             .collect::<Vec<_>>();
@@ -408,17 +411,22 @@ impl<const CS: usize> Mesher<CS> {
             Self::linearize_with_pad(0, 0, 1) as i32,
         ];
         // Step 1: Count the occurrences of each air-exposed voxel in each LOD window
-        for (i, v) in voxels.iter().enumerate() {
-            let lod_index = Self::shrink3d(i, lod);
-            // count total blocks (to handle partial windows)
-            counters[0][lod_index] += 1;
-            // count blocks that are exposed to air
-            if neighbors
-                .iter()
-                .any(|&n| voxels.get((i as i32 + n) as usize).copied() == Some(0))
-            {
-                // increase the counter for this voxel in the corresponding LOD window
-                counters[*v as usize][lod_index] += 1;
+        for x in 0..CS {
+            for y in 0..CS {
+                for z in 0..CS {
+                    let lod_index = lod_linearize(x / lod, y / lod, z / lod);
+                    let i = pad_linearize::<CS>(x, y, z);
+                    // count total blocks (to handle partial windows)
+                    counters[0][lod_index] += 1;
+                    // count blocks that are exposed to air
+                    if neighbors
+                        .iter()
+                        .any(|&n| voxels.get((i as i32 + n) as usize).copied() == Some(0))
+                    {
+                        // increase the counter for this voxel in the corresponding LOD window
+                        counters[voxels[i] as usize][lod_index] += 1;
+                    }
+                }
             }
         }
         // Step 2: Compute a "winning" voxel for each LOD window based on the counters
@@ -442,8 +450,14 @@ impl<const CS: usize> Mesher<CS> {
             winning_voxels[i] = winning_voxel;
         }
         // Step 3: fill the voxels buffer with the "winning" blocks for each LOD window
-        for (i, v) in voxels.iter_mut().enumerate() {
-            *v = winning_voxels[Self::shrink3d(i, lod)];
+        // do not touch the padding
+        for x in 0..CS {
+            for y in 0..CS {
+                for z in 0..CS {
+                    voxels[pad_linearize::<CS>(x, y, z)] =
+                        winning_voxels[lod_linearize(x / lod, y / lod, z / lod)];
+                }
+            }
         }
         self.mesh(voxels, transparents);
     }
@@ -453,14 +467,6 @@ impl<const CS: usize> Mesher<CS> {
     /// Used only in LOD calculations to account for the padded chunk dimensions.
     fn linearize_with_pad(x: usize, y: usize, z: usize) -> usize {
         z + x * Self::CS_P + y * Self::CS_P2
-    }
-    /// Equivalent of de-linearizing `i`, dividing the 3 coordinates by `factor`, and linearizing again.
-    fn shrink3d(i: usize, factor: usize) -> usize {
-        let z = i % Self::CS_P;
-        let x = (i / Self::CS_P) % Self::CS_P;
-        let y = i / Self::CS_P2;
-        let n = Self::CS_P.div_ceil(factor);
-        z / factor + (x / factor) * n + (y / factor) * n * n
     }
 }
 
