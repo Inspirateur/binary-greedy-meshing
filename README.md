@@ -1,5 +1,5 @@
 # binary-greedy-meshing
-Originally a port of [Binary Greedy Meshing v2](https://github.com/cgerikj/binary-greedy-meshing) to Rust, with additional improvements such as support for transparent blocks and LODs.
+Originally a port of [Binary Greedy Meshing v2](https://github.com/cgerikj/binary-greedy-meshing) to Rust, with additional improvements such as support for transparent blocks and (experimental) Level Of Detail (LOD).
 
 ## How to use
 This crate is used in the Bevy voxel game [Riverbed](https://github.com/Inspirateur/riverbed), you can check out the code for usage examples.
@@ -57,6 +57,6 @@ This is in line with the 50-200μs performance range reported from the original 
 
 The meshing is also ~30x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~3ms** to greedy mesh a chunk on my machine.
 
-Experimental Level Of Detail (LOD) support is also available via `mesh_lod` but it is very slow rn (2.5 ms).
+Experimental LOD support is available via `mesh_lod` but it is very slow right now (**2.5 ms** on my machine).
 
 *chunk sizes are 62^3 (64^3 with padding), this crate doesn't support other sizes.*
