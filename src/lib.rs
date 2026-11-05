@@ -26,6 +26,7 @@ pub struct Mesher<const CS: usize> {
 
 impl<const CS: usize> Mesher<CS> {
     pub const CS_2: usize = CS * CS;
+    pub const CS_3: usize = CS * CS * CS;
     pub const CS_P: usize = CS + 2;
     pub const CS_P2: usize = Self::CS_P * Self::CS_P;
     pub const CS_P3: usize = Self::CS_P * Self::CS_P * Self::CS_P;
@@ -369,6 +370,98 @@ impl<const CS: usize> Mesher<CS> {
         self.face_culling(voxels, transparents);
         self.face_merging(voxels);
     }
+
+    /// Same as `mesh` but with a level-of-detail controlled by the `lod` parameter.
+    /// The LOD algorithm divides the chunk into cubic windows of size `lod`
+    /// and selects the most common air-exposed voxel to fill that window.
+    ///
+    /// You can save a O(n) check on voxels by providing the `max_voxel_value` if you already have it
+    /// (due to palette compression or equivalent).
+    ///
+    /// If `lod` is 1 (or 0), this is equivalent to calling `mesh`.
+    ///
+    /// *NB: you don't need to use multiples of the chunk size for `lod`. Partial windows are handled properly.*
+    pub fn mesh_lod(
+        &mut self,
+        voxels: &mut [u16],
+        transparents: &BTreeSet<u16>,
+        lod: usize,
+        max_voxel_value: Option<u16>,
+    ) {
+        if lod <= 1 {
+            return self.mesh(voxels, transparents);
+        }
+        let max_v = max_voxel_value.unwrap_or(*voxels.iter().max().unwrap_or(&0));
+        if max_v == 0 {
+            return;
+        }
+        let lod_view_volume = Self::CS_P.div_ceil(lod).pow(3);
+        let mut counters = (0..max_v + 1)
+            .map(|_| vec![0; lod_view_volume].into_boxed_slice())
+            .collect::<Vec<_>>();
+        let neighbors = [
+            -(Self::linearize_with_pad(1, 0, 0) as i32),
+            Self::linearize_with_pad(1, 0, 0) as i32,
+            -(Self::linearize_with_pad(0, 1, 0) as i32),
+            Self::linearize_with_pad(0, 1, 0) as i32,
+            -(Self::linearize_with_pad(0, 0, 1) as i32),
+            Self::linearize_with_pad(0, 0, 1) as i32,
+        ];
+        // Step 1: Count the occurrences of each air-exposed voxel in each LOD window
+        for (i, v) in voxels.iter().enumerate() {
+            let lod_index = Self::shrink3d(i, lod);
+            // count total blocks (to handle partial windows)
+            counters[0][lod_index] += 1;
+            // count blocks that are exposed to air
+            if neighbors
+                .iter()
+                .any(|&n| voxels.get((i as i32 + n) as usize).copied() == Some(0))
+            {
+                // increase the counter for this voxel in the corresponding LOD window
+                counters[*v as usize][lod_index] += 1;
+            }
+        }
+        // Step 2: Compute a "winning" voxel for each LOD window based on the counters
+        let mut winning_voxels = vec![0_u16; lod_view_volume].into_boxed_slice();
+        for i in 0..lod_view_volume {
+            let mut max_count = 0;
+            let mut winning_voxel = 0;
+            let mut total_voxel: i32 = 0;
+            // iterate over the counters of non-air voxels
+            for (v, counter_view) in counters.iter().enumerate().skip(1) {
+                total_voxel += counter_view[i];
+                if counter_view[i] > max_count {
+                    max_count = counter_view[i];
+                    winning_voxel = v as u16;
+                }
+            }
+            // Air only wins if it occupies an overwhelming majority of the volume
+            if total_voxel.pow(3) < counters[0][i] {
+                winning_voxel = 0;
+            }
+            winning_voxels[i] = winning_voxel;
+        }
+        // Step 3: fill the voxels buffer with the "winning" blocks for each LOD window
+        for (i, v) in voxels.iter_mut().enumerate() {
+            *v = winning_voxels[Self::shrink3d(i, lod)];
+        }
+        self.mesh(voxels, transparents);
+    }
+
+    /// A linearize function that uses the padded dimension instead of the chunk size.
+    ///
+    /// Used only in LOD calculations to account for the padded chunk dimensions.
+    fn linearize_with_pad(x: usize, y: usize, z: usize) -> usize {
+        z + x * Self::CS_P + y * Self::CS_P2
+    }
+    /// Equivalent of de-linearizing `i`, dividing the 3 coordinates by `factor`, and linearizing again.
+    fn shrink3d(i: usize, factor: usize) -> usize {
+        let z = i % Self::CS_P;
+        let x = (i / Self::CS_P) % Self::CS_P;
+        let y = i / Self::CS_P2;
+        let n = Self::CS_P.div_ceil(factor);
+        z / factor + (x / factor) * n + (y / factor) * n * n
+    }
 }
 
 #[inline]
@@ -379,7 +472,6 @@ fn face_value(v1: u16, v2: u16, transparents: &BTreeSet<u16>) -> u64 {
 
 #[inline]
 fn get_axis_index<const CS: usize>(axis: usize, a: usize, b: usize, c: usize) -> usize {
-    // TODO: figure out how to shuffle this around to make it work with YZX
     match axis {
         0 => b + (a * Mesher::<CS>::CS_P) + (c * Mesher::<CS>::CS_P2),
         1 => b + (c * Mesher::<CS>::CS_P) + (a * Mesher::<CS>::CS_P2),
@@ -403,8 +495,29 @@ pub fn indices(num_quads: usize) -> Vec<u32> {
     res
 }
 
+/// Encode 3 coordinates into a linear index within the chunk.
+pub fn linearize<const CS: usize>(x: usize, y: usize, z: usize) -> usize {
+    z + x * CS + y * Mesher::<CS>::CS_2
+}
+
+pub fn delinearize<const CS: usize>(index: usize) -> (usize, usize, usize) {
+    let z = index % CS;
+    let x = (index / CS) % CS;
+    let y = index / (CS * CS);
+    (x, y, z)
+}
+
+/// Encode 3 coordinates into a linear index within a padded chunk.
 pub fn pad_linearize<const CS: usize>(x: usize, y: usize, z: usize) -> usize {
     z + 1 + (x + 1) * Mesher::<CS>::CS_P + (y + 1) * Mesher::<CS>::CS_P2
+}
+
+/// Decode a linear index into 3 coordinates within a padded chunk.
+pub fn pad_de_linearize<const CS: usize>(index: usize) -> (usize, usize, usize) {
+    let z = index % Mesher::<CS>::CS_P - 1;
+    let x = (index / Mesher::<CS>::CS_P) % Mesher::<CS>::CS_P - 1;
+    let y = index / Mesher::<CS>::CS_P2 - 1;
+    (x, y, z)
 }
 
 /// Compute an opacity mask from a voxel buffer and a BTreeSet specifying which voxel values are transparent
@@ -473,7 +586,7 @@ mod tests {
 
     /// Ensures that mesh and fast_mesh return the same results
     #[test]
-    fn same_results() {
+    fn mesh_and_fast_mesh_eq() {
         let voxels = test_buffer();
         let transparent_blocks = BTreeSet::from([2]);
         let opaque_mask = bgm::compute_opaque_mask::<CS>(voxels.as_slice(), &BTreeSet::new());
@@ -484,6 +597,34 @@ mod tests {
         let mut mesher2 = bgm::Mesher::<CS>::new();
         mesher2.fast_mesh(voxels.as_slice(), &opaque_mask, &trans_mask);
         assert_eq!(mesher1.quads, mesher2.quads);
+    }
+
+    /// Ensures that pad_linearize and pad_de_linearize are consistent with each other.
+    #[test]
+    fn pad_linearize_roundtrip() {
+        for x in 0..CS {
+            for y in 0..CS {
+                for z in 0..CS {
+                    let i = bgm::pad_linearize::<CS>(x, y, z);
+                    let (x_, y_, z_) = bgm::pad_de_linearize::<CS>(i);
+                    assert_eq!((x, y, z), (x_, y_, z_));
+                }
+            }
+        }
+    }
+
+    /// Ensures that linearize and delinearize are consistent with each other.
+    #[test]
+    fn linearize_roundtrip() {
+        for x in 0..CS {
+            for y in 0..CS {
+                for z in 0..CS {
+                    let i = bgm::linearize::<CS>(x, y, z);
+                    let (x_, y_, z_) = bgm::delinearize::<CS>(i);
+                    assert_eq!((x, y, z), (x_, y_, z_));
+                }
+            }
+        }
     }
 
     fn test_buffer() -> Box<[u16; bgm::Mesher::<CS>::CS_P3]> {

@@ -1,7 +1,7 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, hint::black_box};
 
 use binary_greedy_meshing as bgm;
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 const SIZE: usize = 16;
 const SIZE2: usize = SIZE.pow(2);
 const CS: usize = 62;

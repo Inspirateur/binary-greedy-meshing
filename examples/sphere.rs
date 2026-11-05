@@ -1,12 +1,12 @@
 use std::collections::BTreeSet;
 
 use bevy::{
+    asset::RenderAssetUsages,
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
     render::{
         RenderPlugin,
         mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues},
-        render_asset::RenderAssetUsages,
         render_resource::VertexFormat,
         settings::{RenderCreation, WgpuFeatures, WgpuSettings},
     },
@@ -25,10 +25,10 @@ fn main() {
         .init_resource::<WireframeConfig>()
         .add_plugins((
             DefaultPlugins.set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     features: WgpuFeatures::POLYGON_MODE_LINE,
                     ..Default::default()
-                }),
+                })),
                 ..default()
             }),
             WireframePlugin::default(),
@@ -56,7 +56,7 @@ fn setup(
     commands.spawn((
         Camera3d::default(),
         Msaa::Sample4,
-        Transform::from_translation(Vec3::new(60.0, 60.0, 100.0))
+        Transform::from_translation(Vec3::new(45.0, 50.0, 70.0))
             .looking_at(Vec3::new(31.0, 31.0, 31.0), Vec3::Y),
     ));
     let mesh = Mesh3d(meshes.add(generate_mesh()));
@@ -68,12 +68,6 @@ fn setup(
             ..Default::default()
         })),
     ));
-
-    commands.insert_resource(AmbientLight {
-        color: Color::WHITE,
-        brightness: light_consts::lux::OVERCAST_DAY,
-        ..Default::default()
-    });
 }
 
 /// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead

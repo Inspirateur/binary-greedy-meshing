@@ -1,12 +1,12 @@
 use std::collections::BTreeSet;
 
 use bevy::{
+    asset::RenderAssetUsages,
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
     render::{
         RenderPlugin,
         mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues},
-        render_asset::RenderAssetUsages,
         render_resource::VertexFormat,
         settings::{RenderCreation, WgpuFeatures, WgpuSettings},
     },
@@ -25,10 +25,10 @@ fn main() {
         .init_resource::<WireframeConfig>()
         .add_plugins((
             DefaultPlugins.set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     features: WgpuFeatures::POLYGON_MODE_LINE,
                     ..Default::default()
-                }),
+                })),
                 ..default()
             }),
             WireframePlugin::default(),
@@ -71,7 +71,7 @@ fn setup(
     ));
     commands.spawn((
         Camera3d::default(),
-        Transform::from_translation(Vec3::new(40.0, 20.0, 50.0))
+        Transform::from_translation(Vec3::new(30.0, 15.0, 40.0))
             .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
     ));
     let [solid_mesh, transp_mesh1, transp_mesh2] = generate_meshes();
@@ -82,7 +82,7 @@ fn setup(
         solid_mesh,
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::linear_rgba(0.8, 0.8, 0.8, 1.0),
-            alpha_mode: AlphaMode::AlphaToCoverage,
+            alpha_mode: AlphaMode::Blend,
             ..Default::default()
         })),
     ));
@@ -102,12 +102,6 @@ fn setup(
             ..Default::default()
         })),
     ));
-
-    commands.insert_resource(AmbientLight {
-        color: Color::WHITE,
-        brightness: light_consts::lux::OVERCAST_DAY,
-        ..Default::default()
-    });
 }
 
 /// Generate 1 mesh per block type for simplicity, in practice we would use a texture array and a custom shader instead
