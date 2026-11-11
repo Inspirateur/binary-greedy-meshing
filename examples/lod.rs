@@ -74,7 +74,7 @@ fn setup(
 fn generate_mesh() -> Mesh {
     let mut voxels = voxel_buffer();
     let mut mesher = bgm::Mesher::<CS>::new();
-    mesher.mesh_lod(&mut voxels, &BTreeSet::new(), 2, None);
+    mesher.mesh_lod(&mut voxels, &BTreeSet::new(), 2);
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     for (face_n, quads) in mesher.quads.iter().enumerate() {

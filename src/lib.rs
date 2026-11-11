@@ -373,100 +373,46 @@ impl<const CS: usize> Mesher<CS> {
 
     /// Same as `mesh` but with a level-of-detail controlled by the `lod` parameter.
     /// The LOD algorithm divides the chunk into cubic windows of size `lod`
-    /// and selects the most common air-exposed voxel to fill that window.
-    ///
-    /// You can save a O(n) check on voxels by providing the `max_voxel_value` if you already have it
-    /// (due to palette compression or equivalent).
+    /// and selects the first top voxel (assuming ZXY order, Y-up) encountered to fill that window.
     ///
     /// If `lod` is 1 (or 0), this is equivalent to calling `mesh`.
     ///
     /// *NB: you don't need to use multiples of the chunk size for `lod`. Partial windows are handled properly.*
-    pub fn mesh_lod(
-        &mut self,
-        voxels: &mut [u16],
-        transparents: &BTreeSet<u16>,
-        lod: usize,
-        max_voxel_value: Option<u16>,
-    ) {
+    pub fn mesh_lod(&mut self, voxels: &mut [u16], transparents: &BTreeSet<u16>, lod: usize) {
         if lod <= 1 {
             return self.mesh(voxels, transparents);
         }
-        let max_v = max_voxel_value.unwrap_or(*voxels.iter().max().unwrap_or(&0));
-        if max_v == 0 {
-            return;
-        }
-        // the lod view is unpadded, padding is only used to check air exposure and is not modified
-        let lod_cs = CS.div_ceil(lod);
-        let lod_view_volume = lod_cs.pow(3);
-        let lod_linearize = |x: usize, y: usize, z: usize| z + x * lod_cs + y * lod_cs * lod_cs;
-        let mut counters = (0..max_v + 1)
-            .map(|_| vec![0; lod_view_volume].into_boxed_slice())
-            .collect::<Vec<_>>();
-        let neighbors = [
-            -(Self::linearize_with_pad(1, 0, 0) as i32),
-            Self::linearize_with_pad(1, 0, 0) as i32,
-            -(Self::linearize_with_pad(0, 1, 0) as i32),
-            Self::linearize_with_pad(0, 1, 0) as i32,
-            -(Self::linearize_with_pad(0, 0, 1) as i32),
-            Self::linearize_with_pad(0, 0, 1) as i32,
-        ];
-        // Step 1: Count the occurrences of each air-exposed voxel in each LOD window
-        for x in 0..CS {
-            for y in 0..CS {
-                for z in 0..CS {
-                    let lod_index = lod_linearize(x / lod, y / lod, z / lod);
-                    let i = pad_linearize::<CS>(x, y, z);
-                    // count total blocks (to handle partial windows)
-                    counters[0][lod_index] += 1;
-                    // count blocks that are exposed to air
-                    if neighbors
-                        .iter()
-                        .any(|&n| voxels.get((i as i32 + n) as usize).copied() == Some(0))
-                    {
-                        // increase the counter for this voxel in the corresponding LOD window
-                        counters[voxels[i] as usize][lod_index] += 1;
+        // Slab by slab, window by window: find the winner, then fill the window while it is in cache.
+        // We do not touch the padding.
+        for y0 in (0..CS).step_by(lod) {
+            let y1 = (y0 + lod).min(CS);
+            for x0 in (0..CS).step_by(lod) {
+                let x1 = (x0 + lod).min(CS);
+                for z0 in (0..CS).step_by(lod) {
+                    let z_range = (z0 + lod).min(CS) - z0;
+                    // top-down so the first non-air voxel found is the topmost
+                    let mut winner = 0;
+                    'search: for y in (y0..y1).rev() {
+                        for x in x0..x1 {
+                            let start = pad_linearize::<CS>(x, y, z0);
+                            if let Some(&v) =
+                                voxels[start..start + z_range].iter().find(|&&v| v != 0)
+                            {
+                                winner = v;
+                                break 'search;
+                            }
+                        }
+                    }
+                    for y in y0..y1 {
+                        for x in x0..x1 {
+                            let start = pad_linearize::<CS>(x, y, z0);
+                            voxels[start..start + z_range].fill(winner);
+                        }
                     }
                 }
             }
         }
-        // Step 2: Compute a "winning" voxel for each LOD window based on the counters
-        let mut winning_voxels = vec![0_u16; lod_view_volume].into_boxed_slice();
-        for i in 0..lod_view_volume {
-            let mut max_count = 0;
-            let mut winning_voxel = 0;
-            let mut total_voxel: i32 = 0;
-            // iterate over the counters of non-air voxels
-            for (v, counter_view) in counters.iter().enumerate().skip(1) {
-                total_voxel += counter_view[i];
-                if counter_view[i] > max_count {
-                    max_count = counter_view[i];
-                    winning_voxel = v as u16;
-                }
-            }
-            // Air only wins if it occupies an overwhelming majority of the volume
-            if total_voxel.pow(3) < counters[0][i] {
-                winning_voxel = 0;
-            }
-            winning_voxels[i] = winning_voxel;
-        }
-        // Step 3: fill the voxels buffer with the "winning" blocks for each LOD window
-        // do not touch the padding
-        for x in 0..CS {
-            for y in 0..CS {
-                for z in 0..CS {
-                    voxels[pad_linearize::<CS>(x, y, z)] =
-                        winning_voxels[lod_linearize(x / lod, y / lod, z / lod)];
-                }
-            }
-        }
         self.mesh(voxels, transparents);
-    }
-
-    /// A linearize function that uses the padded dimension instead of the chunk size.
-    ///
-    /// Used only in LOD calculations to account for the padded chunk dimensions.
-    fn linearize_with_pad(x: usize, y: usize, z: usize) -> usize {
-        z + x * Self::CS_P + y * Self::CS_P2
     }
 }
 
@@ -501,24 +447,12 @@ pub fn indices(num_quads: usize) -> Vec<u32> {
     res
 }
 
-/// Encode 3 coordinates into a linear index within the chunk.
-pub fn linearize<const CS: usize>(x: usize, y: usize, z: usize) -> usize {
-    z + x * CS + y * Mesher::<CS>::CS_2
-}
-
-pub fn delinearize<const CS: usize>(index: usize) -> (usize, usize, usize) {
-    let z = index % CS;
-    let x = (index / CS) % CS;
-    let y = index / (CS * CS);
-    (x, y, z)
-}
-
-/// Encode 3 coordinates into a linear index within a padded chunk.
+/// Encode 3 coordinates into a linear index within a padded chunk (ZXY order).
 pub fn pad_linearize<const CS: usize>(x: usize, y: usize, z: usize) -> usize {
     z + 1 + (x + 1) * Mesher::<CS>::CS_P + (y + 1) * Mesher::<CS>::CS_P2
 }
 
-/// Decode a linear index into 3 coordinates within a padded chunk.
+/// Decode a linear index into 3 coordinates within a padded chunk (ZXY order).
 pub fn pad_de_linearize<const CS: usize>(index: usize) -> (usize, usize, usize) {
     let z = index % Mesher::<CS>::CS_P - 1;
     let x = (index / Mesher::<CS>::CS_P) % Mesher::<CS>::CS_P - 1;
@@ -619,20 +553,6 @@ mod tests {
         }
     }
 
-    /// Ensures that linearize and delinearize are consistent with each other.
-    #[test]
-    fn linearize_roundtrip() {
-        for x in 0..CS {
-            for y in 0..CS {
-                for z in 0..CS {
-                    let i = bgm::linearize::<CS>(x, y, z);
-                    let (x_, y_, z_) = bgm::delinearize::<CS>(i);
-                    assert_eq!((x, y, z), (x_, y_, z_));
-                }
-            }
-        }
-    }
-
     fn test_buffer() -> Box<[u16; bgm::Mesher::<CS>::CS_P3]> {
         let mut voxels = Box::new([0; bgm::Mesher::<CS>::CS_P3]);
         for x in 0..CS {
@@ -655,5 +575,29 @@ mod tests {
         } else {
             0
         }
+    }
+
+    #[test]
+    fn lod_dont_expose_below_surface_blocks() {
+        let mut voxels = Box::new([0; bgm::Mesher::<CS>::CS_P3]);
+        for x in 0..CS {
+            let soil_height = if x < CS / 2 { 2 } else { 3 };
+            for y in 0..CS {
+                for z in 0..CS {
+                    if y < soil_height {
+                        voxels[bgm::pad_linearize::<CS>(x, y, z)] = 1;
+                    } else if y == soil_height {
+                        voxels[bgm::pad_linearize::<CS>(x, y, z)] = 2;
+                    } else {
+                        voxels[bgm::pad_linearize::<CS>(x, y, z)] = 0;
+                    }
+                }
+            }
+        }
+        let mut mesher = bgm::Mesher::<CS>::new();
+        // After this the voxels array should not contain a single "1" voxel, because they are underneath a layer of "2" voxels,
+        // and the window size is bigger than the depth of the "soil" so there should not be a window with only "1" either.
+        mesher.mesh_lod(voxels.as_mut_slice(), &BTreeSet::new(), 4);
+        assert!(!voxels.iter().any(|&v| v == 1));
     }
 }
