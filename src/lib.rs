@@ -21,6 +21,9 @@ pub struct Mesher<const CS: usize> {
     forward_merged: Box<[u8]>,
     /// CS
     right_merged: Box<[u8]>,
+    /// CS_P2, scratch masks for mesh_lod
+    lod_opaque: Box<[u64]>,
+    lod_trans: Box<[u64]>,
 }
 
 impl<const CS: usize> Mesher<CS> {
@@ -37,6 +40,8 @@ impl<const CS: usize> Mesher<CS> {
             face_masks: vec![0; Self::CS_2 * 6].into_boxed_slice(),
             forward_merged: vec![0; Self::CS_2].into_boxed_slice(),
             right_merged: vec![0; CS].into_boxed_slice(),
+            lod_opaque: vec![0; Self::CS_P2].into_boxed_slice(),
+            lod_trans: vec![0; Self::CS_P2].into_boxed_slice(),
             quads: core::array::from_fn(|_| Vec::new()),
         }
     }
@@ -381,8 +386,37 @@ impl<const CS: usize> Mesher<CS> {
         if lod <= 1 {
             return self.mesh(voxels, transparents);
         }
+        // The masks are built along the way so we can use the fast culling path.
+        let mut opaque_mask = core::mem::take(&mut self.lod_opaque);
+        let mut trans_mask = core::mem::take(&mut self.lod_trans);
+        opaque_mask.fill(0);
+        trans_mask.fill(0);
+        let set_bits = |opaque: &mut [u64], trans: &mut [u64], i: usize, v: u16| {
+            if v != 0 {
+                let (r, q) = (i / Self::CS_P, i % Self::CS_P);
+                if transparents.contains(&v) {
+                    trans[r] |= 1 << q;
+                } else {
+                    opaque[r] |= 1 << q;
+                }
+            }
+        };
+        // Padding is left untouched by the LOD, so its bits are read as is.
+        for y in 0..Self::CS_P {
+            for x in 0..Self::CS_P {
+                let row = (y * Self::CS_P + x) * Self::CS_P;
+                if y == 0 || y == Self::CS_P - 1 || x == 0 || x == Self::CS_P - 1 {
+                    for z in 0..Self::CS_P {
+                        set_bits(&mut opaque_mask, &mut trans_mask, row + z, voxels[row + z]);
+                    }
+                } else {
+                    for z in [0, Self::CS_P - 1] {
+                        set_bits(&mut opaque_mask, &mut trans_mask, row + z, voxels[row + z]);
+                    }
+                }
+            }
+        }
         // Slab by slab, window by window: find the winner, then fill the window while it is in cache.
-        // We do not touch the padding.
         for y0 in (0..CS).step_by(lod) {
             let y1 = (y0 + lod).min(CS);
             for x0 in (0..CS).step_by(lod) {
@@ -402,16 +436,28 @@ impl<const CS: usize> Mesher<CS> {
                             }
                         }
                     }
+                    let bits = ((1u64 << z_range) - 1) << (z0 + 1);
+                    let is_trans = winner != 0 && transparents.contains(&winner);
                     for y in y0..y1 {
                         for x in x0..x1 {
                             let start = pad_linearize::<CS>(x, y, z0);
                             voxels[start..start + z_range].fill(winner);
+                            if winner != 0 {
+                                let r = start / Self::CS_P;
+                                if is_trans {
+                                    trans_mask[r] |= bits;
+                                } else {
+                                    opaque_mask[r] |= bits;
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-        self.mesh(voxels, transparents);
+        self.fast_mesh(voxels, &opaque_mask, &trans_mask);
+        self.lod_opaque = opaque_mask;
+        self.lod_trans = trans_mask;
     }
 }
 
@@ -574,6 +620,17 @@ mod tests {
         } else {
             0
         }
+    }
+
+    #[test]
+    fn lod_matches_mesh_on_lodded_buffer() {
+        let mut voxels = test_buffer();
+        let transparents = BTreeSet::from([2]);
+        let mut mesher = bgm::Mesher::<CS>::new();
+        mesher.mesh_lod(voxels.as_mut_slice(), &transparents, 4);
+        let mut reference = bgm::Mesher::<CS>::new();
+        reference.mesh(voxels.as_slice(), &transparents);
+        assert_eq!(mesher.quads, reference.quads);
     }
 
     #[test]
