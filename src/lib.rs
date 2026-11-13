@@ -5,7 +5,6 @@ extern crate alloc;
 
 mod face;
 mod quad;
-
 use alloc::{boxed::Box, collections::btree_set::BTreeSet, vec::Vec};
 
 pub use face::*;
