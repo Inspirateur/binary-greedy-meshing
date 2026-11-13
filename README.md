@@ -49,11 +49,12 @@ The fastest way of rendering quads is using instancing (check [this video](https
 
 ## Benchmarks
 running `cargo bench` on AMD Ryzen 5 5500 3.60 GHz:
-- "fast_mesh" with opaque voxels only: **65 µs**
-- "mesh" with opaque voxels only: **300 µs**
-- "fast_mesh" with opaque & transparents voxels: **90 µs**
-- "mesh" with opaque & transparents voxels: **340 µs**
+- "fast_mesh" with opaque voxels only: ~**100 µs**
+- "mesh" with opaque voxels only: ~**700 µs**
+- "fast_mesh" with opaque & transparents voxels: ~**100 µs**
+- "mesh" with opaque & transparents voxels: ~**700 µs**
 This is in line with the 50-200μs performance range reported from the original C version of the library  (which doesn't yet support transparency).
+> NB: the numbers are heavily dependant on the geometry, the more "full" and flat the geometry the faster it is.
 
 The meshing is also ~30x faster than [block-mesh-rs](https://github.com/bonsairobo/block-mesh-rs) which took **~3ms** to greedy mesh a chunk on my machine.
 
